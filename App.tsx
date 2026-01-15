@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Loader } from '@react-three/drei';
 import Scene from './components/Scene';
@@ -55,14 +55,7 @@ export default function App() {
   const toggleCamera = () => {
     const nextState = !isCameraOn;
     setIsCameraOn(nextState);
-    if (nextState) {
-        showToast("摄像头正在开启...");
-    } else {
-        showToast("摄像头已关闭");
-        // Reset to initial state
-        setMode(AppMode.TREE);
-        setActivePhotoIndex(null);
-    }
+    showToast(nextState ? "摄像头已开启，正在识别手势..." : "摄像头已关闭");
   };
 
   // Gesture Logic to State Mapping
@@ -94,9 +87,9 @@ export default function App() {
       {/* 3D Scene Layer */}
       <div className="absolute inset-0 z-0">
         <Canvas 
-          camera={{ position: [0, 0, 24], fov: 45 }}
+          camera={{ position: [0, 0, 12], fov: 45 }}
           gl={{ antialias: false, powerPreference: "high-performance" }}
-          dpr={[1, 3]}
+          dpr={[1, 2]}
         >
           <Scene 
             mode={mode} 
@@ -124,9 +117,9 @@ export default function App() {
         />
       </div>
 
-      {/* Toast Notification - Moved to top-right to avoid blocking title */}
+      {/* Toast Notification */}
       {toastMessage && (
-        <div className="absolute top-8 right-8 z-50 bg-white/10 backdrop-blur-md border border-yellow-500/50 text-yellow-200 px-6 py-3 rounded-full shadow-[0_0_20px_rgba(255,215,0,0.3)] animate-fade-in-down transition-all">
+        <div className="absolute top-8 left-1/2 transform -translate-x-1/2 z-50 bg-white/10 backdrop-blur-md border border-yellow-500/50 text-yellow-200 px-6 py-3 rounded-full shadow-[0_0_20px_rgba(255,215,0,0.3)] animate-bounce transition-all">
           {toastMessage}
         </div>
       )}

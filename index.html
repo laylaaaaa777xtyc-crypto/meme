@@ -7,7 +7,7 @@
     <!-- Tailwind CSS (CDN for simplicity) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Playfair+Display:ital@0;1&family=Mountains+of+Christmas:wght@700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Playfair+Display:ital@0;1&display=swap" rel="stylesheet">
     <style>
       body { margin: 0; background: #000; overflow: hidden; }
       /* Custom scrollbar */
@@ -15,136 +15,33 @@
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
 
-      /* Christmas Snow-Capped Text Effect */
-      .christmas-text {
-        font-family: 'Cinzel Decorative', cursive;
-        
-        /* Gradient: Top White (Snow), Middle Red, Bottom Green */
+      /* Shimmer Text Animation */
+      .magical-text {
         background: linear-gradient(
-          180deg, 
-          #ffffff 0%, 
-          #ffffff 35%, 
-          #d42426 35%, 
-          #d42426 70%, 
-          #165b33 70%, 
-          #165b33 100%
-        );
-        background-size: 100% 100%;
-        
-        -webkit-background-clip: text;
-        background-clip: text;
-        -webkit-text-fill-color: transparent;
-        color: transparent;
-
-        /* Gold Stroke */
-        -webkit-text-stroke: 1px #ffd700;
-        
-        /* Glow Effect */
-        filter: drop-shadow(0 0 5px rgba(212, 36, 38, 0.6));
-        
-        animation: float-glow 4s ease-in-out infinite;
-      }
-
-      /* Magical Subtitle Effect */
-      .magical-subtitle {
-        font-family: 'Mountains of Christmas', cursive;
-        font-weight: 700;
-        /* Silver to Gold gradient */
-        background: linear-gradient(
-          90deg, 
-          #9CA3AF 0%, 
-          #FCD34D 25%, 
-          #FFFFFF 50%, 
-          #FCD34D 75%, 
-          #9CA3AF 100%
+          to right, 
+          #bf953f 0%, 
+          #fcf6ba 25%, 
+          #b38728 50%, 
+          #fbf5b7 75%, 
+          #aa771c 100%
         );
         background-size: 200% auto;
-        -webkit-background-clip: text;
+        color: #000;
         background-clip: text;
+        -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        color: transparent; /* Fallback */
-        
-        animation: shimmer 3s linear infinite;
-        filter: drop-shadow(0 0 3px rgba(252, 211, 77, 0.4));
-        letter-spacing: 0.05em;
+        animation: shine 4s linear infinite;
+        font-family: 'Cinzel Decorative', cursive;
       }
-
-      @keyframes shimmer {
+      
+      @keyframes shine {
         to {
           background-position: 200% center;
         }
       }
 
-      @keyframes float-glow {
-        0%, 100% {
-          transform: translateY(0);
-          filter: drop-shadow(0 0 5px rgba(212, 36, 38, 0.5));
-        }
-        50% {
-          transform: translateY(-5px);
-          filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.8));
-        }
-      }
-
-      /* Bouncing decoration animation */
-      .animate-bounce-soft {
-        animation: bounce-soft 2s infinite;
-      }
-      .delay-100 { animation-delay: 0.1s; }
-      .delay-200 { animation-delay: 0.2s; }
-      .delay-300 { animation-delay: 0.3s; }
-
-      @keyframes bounce-soft {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-4px); }
-      }
-
       .font-serif-custom {
         font-family: 'Playfair Display', serif;
-      }
-
-      /* Fairy Lights Styles */
-      .light-wire {
-        position: absolute;
-        top: -12px;
-        left: -10px;
-        right: -10px;
-        height: 20px;
-        border-bottom: 2px solid rgba(255, 255, 255, 0.2);
-        border-radius: 50%;
-        z-index: 10;
-        pointer-events: none;
-      }
-      
-      .light-bulb {
-        position: absolute;
-        top: 18px; /* Hang from the wire */
-        width: 8px;
-        height: 12px;
-        border-radius: 50% 50% 40% 40%;
-        animation: flash 1.5s infinite alternate ease-in-out;
-      }
-      
-      /* Bulb Holder */
-      .light-bulb::before {
-        content: '';
-        position: absolute;
-        top: -3px;
-        left: 2px;
-        width: 4px;
-        height: 4px;
-        background: #444;
-        border-radius: 2px;
-      }
-
-      .light-red { background: #ff3333; box-shadow: 0 0 8px #ff3333; animation-delay: 0s; }
-      .light-green { background: #33ff33; box-shadow: 0 0 8px #33ff33; animation-delay: 0.4s; }
-      .light-gold { background: #ffd700; box-shadow: 0 0 8px #ffd700; animation-delay: 0.8s; }
-      .light-blue { background: #33ccff; box-shadow: 0 0 8px #33ccff; animation-delay: 1.2s; }
-
-      @keyframes flash {
-        0% { opacity: 0.4; transform: scale(0.9); box-shadow: 0 0 2px currentColor; }
-        100% { opacity: 1; transform: scale(1.1); box-shadow: 0 0 12px currentColor; }
       }
     </style>
   <script type="importmap">
