@@ -1,0 +1,7 @@
+{
+  "name": "手势圣诞树",
+  "description": "一个通过MediaPipe和WebGL实现的手势控制3D电影感圣诞树。",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
