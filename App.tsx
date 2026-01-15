@@ -13,9 +13,6 @@ const DEFAULT_PHOTOS: PhotoData[] = Array.from({ length: 6 }).map((_, i) => ({
   aspectRatio: 1,
 }));
 
-// Christmas Music URL - "We Wish You a Merry Christmas"
-const CHRISTMAS_MUSIC_URL = "https://cdn.pixabay.com/audio/2022/11/22/audio_febc508520.mp3"; 
-
 export default function App() {
   const [mode, setMode] = useState<AppMode>(AppMode.TREE);
   const [photos, setPhotos] = useState<PhotoData[]>(DEFAULT_PHOTOS);
@@ -25,53 +22,12 @@ export default function App() {
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   
-  // Audio State
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [isMusicPlaying, setIsMusicPlaying] = useState(false);
-  
   // Hand tracking state shared with Scene
   const [handState, setHandState] = useState<GestureState>({
     gesture: 'Unknown',
     isPinching: false,
     handPosition: { x: 0.5, y: 0.5 }
   });
-
-  // Init Audio on Mount
-  useEffect(() => {
-    const audio = new Audio(CHRISTMAS_MUSIC_URL);
-    audio.loop = true;
-    audio.volume = 0.4; // Not too loud
-    audioRef.current = audio;
-
-    // Attempt autoplay
-    const playPromise = audio.play();
-    if (playPromise !== undefined) {
-      playPromise
-        .then(() => {
-          setIsMusicPlaying(true);
-        })
-        .catch(error => {
-          console.log("Autoplay prevented:", error);
-          setIsMusicPlaying(false);
-        });
-    }
-
-    return () => {
-      audio.pause();
-      audioRef.current = null;
-    };
-  }, []);
-
-  const toggleMusic = () => {
-    if (!audioRef.current) return;
-    if (isMusicPlaying) {
-      audioRef.current.pause();
-      setIsMusicPlaying(false);
-    } else {
-      audioRef.current.play();
-      setIsMusicPlaying(true);
-    }
-  };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -99,11 +55,10 @@ export default function App() {
   const toggleCamera = () => {
     const nextState = !isCameraOn;
     setIsCameraOn(nextState);
-    showToast(nextState ? "摄像头已开启，正在识别手势..." : "摄像头已关闭");
-    
-    // Also try to start music if not playing when user interacts
-    if (!isMusicPlaying && audioRef.current && nextState) {
-        audioRef.current.play().then(() => setIsMusicPlaying(true)).catch(() => {});
+    if (nextState) {
+        showToast("摄像头正在开启...");
+    } else {
+        showToast("摄像头已关闭");
     }
   };
 
@@ -163,8 +118,6 @@ export default function App() {
           onUpload={handlePhotoUpload}
           isCameraOn={isCameraOn}
           onToggleCamera={toggleCamera}
-          isMusicPlaying={isMusicPlaying}
-          onToggleMusic={toggleMusic}
         />
       </div>
 
