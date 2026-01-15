@@ -96,7 +96,7 @@ export default function App() {
         <Canvas 
           camera={{ position: [0, 0, 24], fov: 45 }}
           gl={{ antialias: false, powerPreference: "high-performance" }}
-          dpr={[1, 2]}
+          dpr={[1, 3]}
         >
           <Scene 
             mode={mode} 

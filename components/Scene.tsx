@@ -9,6 +9,8 @@ import { AppMode, GestureState, PhotoData } from '../types';
 
 // 顶点着色器：增加螺旋、星系旋转和闪烁动画
 const particleVertexShader = `
+  precision highp float;
+  
   uniform float uTime;
   uniform float uExpand; // 0 = Tree, 1 = Cloud
   uniform float uPixelRatio; // 像素比，用于适配移动端高清屏
@@ -89,16 +91,22 @@ const particleVertexShader = `
     
     // 7. 大小计算 - 适配 DPR
     // 增加基础大小倍率 (x1.5) 确保移动端可见
-    gl_PointSize = (aSize * sizeMod * (800.0 / -mvPosition.z)) * uPixelRatio;
+    float calculatedSize = (aSize * sizeMod * (800.0 / -mvPosition.z)) * uPixelRatio;
+    
+    // 关键修复：确保最小尺寸，防止在高清屏上消失
+    gl_PointSize = max(calculatedSize, 4.0 * uPixelRatio);
+    
     gl_Position = projectionMatrix * mvPosition;
     
     // 8. 透明度传递 - 稍微提升基础透明度，确保可见
-    vAlpha = 0.4 + 0.3 * twinkle; 
+    vAlpha = 0.6 + 0.4 * twinkle; 
   }
 `;
 
 // 片元着色器：柔和辉光
 const particleFragmentShader = `
+  precision highp float;
+  
   varying vec3 vColor;
   varying float vAlpha;
   
@@ -110,9 +118,10 @@ const particleFragmentShader = `
     
     // --- 辉光计算 ---
     float glow = 1.0 - (dist * 2.0);
-    glow = pow(glow, 2.0); // 稍微降低指数，让光晕范围更大一点点
+    glow = pow(glow, 1.5); // 降低指数，让光晕更实
     
-    gl_FragColor = vec4(vColor, glow * vAlpha); 
+    // 增强颜色输出，防止看起来太暗
+    gl_FragColor = vec4(vColor * 2.0, glow * vAlpha); 
   }
 `;
 
@@ -182,8 +191,8 @@ const OrnamentSystem = ({ mode }: { mode: AppMode }) => {
       col[i * 3 + 1] = color.g;
       col[i * 3 + 2] = color.b;
       
-      // --- 4. Sizes ---
-      sz[i] = Math.random() < 0.7 ? (Math.random() * 0.8 + 0.6) : (Math.random() * 1.5 + 1.5);
+      // --- 4. Sizes (Increased base size slightly) ---
+      sz[i] = Math.random() < 0.7 ? (Math.random() * 0.8 + 0.8) : (Math.random() * 1.5 + 2.0);
       
       rnd[i] = Math.random();
     }
@@ -194,7 +203,7 @@ const OrnamentSystem = ({ mode }: { mode: AppMode }) => {
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
     uExpand: { value: 0 },
-    uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) } 
+    uPixelRatio: { value: typeof window !== 'undefined' ? window.devicePixelRatio : 1 } 
   }), []);
 
   useFrame((state, delta) => {
@@ -202,8 +211,8 @@ const OrnamentSystem = ({ mode }: { mode: AppMode }) => {
     uniforms.uTime.value = state.clock.elapsedTime;
     const targetExpand = mode === AppMode.TREE ? 0 : 1;
     uniforms.uExpand.value = THREE.MathUtils.lerp(uniforms.uExpand.value, targetExpand, delta * 2.0);
-    // 确保 pixel ratio 在窗口变动时正确（虽然一般不变，但为了稳健）
-    uniforms.uPixelRatio.value = Math.min(window.devicePixelRatio, 2);
+    // Dynamic DPR update
+    uniforms.uPixelRatio.value = state.gl.getPixelRatio();
   });
 
   return (
@@ -223,6 +232,7 @@ const OrnamentSystem = ({ mode }: { mode: AppMode }) => {
         depthWrite={false}
         blending={THREE.AdditiveBlending}
         vertexColors={false}
+        toneMapped={false} // 关键：禁用 tone mapping 以保持高亮颜色
       />
     </points>
   );
@@ -332,8 +342,10 @@ const Scene: React.FC<SceneProps> = ({ mode, handState, photos, activePhotoIndex
   const groupRef = useRef<THREE.Group>(null);
   const { viewport } = useThree();
   
-  // Responsive Scale: 移动端视口较窄，可能需要略微缩小或调整
-  const responsiveScale = viewport.width < 5 ? 0.8 : 1.0;
+  // Responsive Scale: 移动端 (viewport.width 小) 需要进一步缩小，避免树过宽
+  // 6.0 这是一个经验值，小于这个宽度的视口通常是竖屏手机
+  const isMobile = viewport.width < 6.0;
+  const responsiveScale = isMobile ? 0.65 : 1.0;
 
   useFrame((state) => {
     if (!groupRef.current) return;
@@ -354,11 +366,14 @@ const Scene: React.FC<SceneProps> = ({ mode, handState, photos, activePhotoIndex
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 0, 26]} />
+      {/* 显式设置背景色，确保 Bloom 和 AdditiveBlending 正常工作 */}
+      <color attach="background" args={['#000000']} />
+      
       <Environment preset="city" />
       
       {/* 调整亮度：由于移动端可能较暗，稍微提升基础亮度和环境光 */}
-      <ambientLight intensity={0.1} />
-      <pointLight position={[10, 10, 10]} intensity={1.0} color="#FFD700" />
+      <ambientLight intensity={0.5} />
+      <pointLight position={[10, 10, 10]} intensity={2.0} color="#FFD700" />
       
       <group ref={groupRef} scale={[responsiveScale, responsiveScale, responsiveScale]}>
         <OrnamentSystem mode={mode} />
@@ -371,13 +386,13 @@ const Scene: React.FC<SceneProps> = ({ mode, handState, photos, activePhotoIndex
         <mesh position={[0, 7.5, 0]} visible={mode === AppMode.TREE}>
            <octahedronGeometry args={[0.6]} />
            <meshBasicMaterial color="#FFFFE0" toneMapped={false} />
-           <pointLight intensity={0.8} distance={15} color="#FFD700" decay={2} />
+           <pointLight intensity={1.0} distance={15} color="#FFD700" decay={2} />
         </mesh>
       </group>
 
       <EffectComposer enableNormalPass={false}>
         {/* Bloom 阈值降低到 0.6，确保在不同设备屏幕上都能看到光晕 */}
-        <Bloom luminanceThreshold={0.6} mipmapBlur intensity={0.5} radius={0.5} />
+        <Bloom luminanceThreshold={0.5} mipmapBlur intensity={0.8} radius={0.6} />
         <Vignette eskil={false} offset={0.1} darkness={1.0} />
       </EffectComposer>
     </>
