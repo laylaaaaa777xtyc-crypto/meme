@@ -1,28 +1,28 @@
 import React, { useRef, useMemo, Suspense } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import { PerspectiveCamera, Environment, useTexture } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
+import { EffectComposer, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { AppMode, GestureState, PhotoData } from '../types';
 
 // --- SHADERS ---
 
-// 顶点着色器：增加螺旋、星系旋转和闪烁动画
 const particleVertexShader = `
+  precision highp float; // 强制高精度，防止移动端计算错误
+
   uniform float uTime;
   uniform float uExpand; // 0 = Tree, 1 = Cloud
+  uniform float uPixelRatio; // 接收像素比
   
-  attribute vec3 aTargetPos; // 散开后的目标位置 (Cloud)
-  attribute float aSize;     // 粒子基础大小
-  attribute float aRandom;   // 随机因子 (0.0 - 1.0)
-  attribute vec3 aColor;     // 重命名颜色属性，避免冲突
+  attribute vec3 aTargetPos; 
+  attribute float aSize;     
+  attribute float aRandom;   
+  attribute vec3 aColor;     
   
   varying vec3 vColor;
-  varying float vAlpha;      // 传递给片元的透明度
   
   #define PI 3.14159265359
 
-  // 绕 Y 轴旋转函数
   vec3 rotateY(vec3 v, float angle) {
     float s = sin(angle);
     float c = cos(angle);
@@ -32,92 +32,68 @@ const particleVertexShader = `
   void main() {
     vColor = aColor;
     
-    // --- 1. 基础位置读取 ---
     vec3 posTree = position;
     vec3 posCloud = aTargetPos;
     
-    // ============================
-    // 2. 圣诞树形态：能量汇聚流光
-    // ============================
-    
-    // A. 螺旋上升旋转
-    float treeSpeed = 0.2; 
-    float treeTwist = posTree.y * 0.5; 
-    float treeAngle = uTime * treeSpeed - treeTwist;
+    // 1. Tree Animation (Stable)
+    float treeSpeed = 0.1; 
+    float treeAngle = uTime * treeSpeed;
     posTree = rotateY(posTree, treeAngle);
     
-    // B. 能量呼吸脉冲
-    float pulse = 1.0 + 0.02 * sin(uTime * 2.0 + posTree.y * 2.0);
-    posTree.x *= pulse;
-    posTree.z *= pulse;
-    
-    // ============================
-    // 3. 星云形态：星系漩涡
-    // ============================
-    
+    // 2. Cloud Animation (Vortex)
     float distToCenter = length(posCloud.xz);
-    float galaxySpeed = 0.1;
+    float galaxySpeed = 0.05;
     float vortexAngle = (8.0 / (distToCenter + 0.5)) + (distToCenter * 0.1); 
     float cloudRot = uTime * galaxySpeed + vortexAngle;
     
     float dir = aRandom > 0.5 ? 1.0 : 0.8; 
     posCloud = rotateY(posCloud, cloudRot * dir);
     
-    float wave = sin(distToCenter * 0.8 - uTime * 1.5);
-    posCloud.y += wave * 0.5;
-    
-    // ============================
-    // 4. 形态混合与后处理
-    // ============================
-    
+    // 3. Morphing
     float smoothExpand = smoothstep(0.0, 1.0, uExpand);
     vec3 currentPos = mix(posTree, posCloud, smoothExpand);
     
-    // 5. 悬浮微动
-    currentPos.y += sin(uTime * 0.5 + aRandom * 10.0) * 0.05; 
-    
-    // 6. 闪烁特效 (Twinkle)
-    float twinkleSpeed = 2.0;
-    float twinklePhase = uTime * twinkleSpeed + aRandom * 100.0;
-    float twinkle = sin(twinklePhase); // -1 ~ 1
-    
-    // 粒子大小随闪烁变化
-    float sizeMod = 0.9 + 0.3 * twinkle; 
+    // Gentle Hover
+    currentPos.y += sin(uTime * 0.5 + aRandom * 10.0) * 0.03; 
     
     vec4 mvPosition = modelViewMatrix * vec4(currentPos, 1.0);
     
-    // 7. 大小计算 - 增加基数防止过小
-    gl_PointSize = (aSize * sizeMod * (600.0 / -mvPosition.z));
-    gl_Position = projectionMatrix * mvPosition;
+    // 4. Size Calculation - CRITICAL FOR MOBILE
+    // (Base Size * Perspective) * PixelRatio
+    float computedSize = (aSize * (800.0 / -mvPosition.z)) * uPixelRatio;
     
-    // 8. 透明度传递 - 进一步降低整体不透明度以减弱亮度
-    vAlpha = 0.15 + 0.15 * twinkle; 
+    // 强制最小尺寸，防止在手机高分屏上变成不可见的 1px
+    gl_PointSize = max(computedSize, 4.0 * uPixelRatio);
+    
+    gl_Position = projectionMatrix * mvPosition;
   }
 `;
 
-// 片元着色器：柔和辉光
 const particleFragmentShader = `
+  precision highp float;
+  
   varying vec3 vColor;
-  varying float vAlpha;
   
   void main() {
     vec2 coord = gl_PointCoord - vec2(0.5);
     float dist = length(coord);
     
-    if (dist > 0.5) discard;
+    // 圆形裁剪，边缘稍微抗锯齿，实心显示
+    float alpha = 1.0 - smoothstep(0.45, 0.5, dist);
     
-    // --- 辉光计算 ---
-    float glow = 1.0 - (dist * 2.0);
-    glow = pow(glow, 2.5); // 增加指数，使光晕收敛得更快，减少过度曝光
+    if (alpha < 0.1) discard;
     
-    gl_FragColor = vec4(vColor, glow * vAlpha); 
+    // 输出纯色，不透明，确保亮度
+    gl_FragColor = vec4(vColor, 1.0); 
   }
 `;
 
 // --- ORNAMENTS (Particle System) ---
 const OrnamentSystem = ({ mode }: { mode: AppMode }) => {
   const pointsRef = useRef<THREE.Points>(null);
-  const count = 4500; 
+  // 增加粒子数量以获得更茂密的效果
+  const count = 6500; 
+  const { viewport } = useThree();
   
   const { positions, targetPositions, colors, sizes, randoms } = useMemo(() => {
     const pos = new Float32Array(count * 3);
@@ -126,33 +102,34 @@ const OrnamentSystem = ({ mode }: { mode: AppMode }) => {
     const sz = new Float32Array(count);
     const rnd = new Float32Array(count);
     
-    // Brighter Palette (Reduced intensity slightly in shader but colors remain vivid)
-    const palette = [
-      new THREE.Color('#FFD700'), // Gold
-      new THREE.Color('#FF4500'), // Orange Red
-      new THREE.Color('#DC143C'), // Crimson
-      new THREE.Color('#32CD32'), // Lime Green
-      new THREE.Color('#F0F8FF'), // Alice Blue
+    // Palette
+    const leafColors = [
+        new THREE.Color('#1a472a'), // Deep Green
+        new THREE.Color('#2d6a4f'), // Forest Green
+        new THREE.Color('#40916c'), // Lighter Green
+        new THREE.Color('#081c15'), // Dark Shadow
+    ];
+    const ornamentColors = [
+        new THREE.Color('#FFD700'), // Gold
+        new THREE.Color('#D90429'), // Red
+        new THREE.Color('#E0E1DD'), // Silver
     ];
 
     for (let i = 0; i < count; i++) {
-      // --- 1. Tree Positions ---
+      // Tree Shape
       const h = Math.random() * 14 - 7; 
       const hNorm = (h + 7) / 14; 
-      
       const radiusMaxAtHeight = (1.0 - hNorm) * 6.5; 
-      
       let rRatio = Math.sqrt(Math.random()); 
-      if (Math.random() > 0.5) rRatio = 0.4 + 0.6 * rRatio;
-
+      if (Math.random() > 0.3) rRatio = 0.6 + 0.4 * rRatio; // Push to surface
       const r = rRatio * radiusMaxAtHeight;
-      const theta = h * 4.0 + Math.random() * Math.PI * 2; 
+      const theta = h * 8.0 + Math.random() * Math.PI * 2; 
 
       pos[i * 3] = Math.cos(theta) * r;
       pos[i * 3 + 1] = h;
       pos[i * 3 + 2] = Math.sin(theta) * r;
 
-      // --- 2. Galaxy Cloud Positions ---
+      // Cloud Shape
       const isDisc = Math.random() > 0.3;
       let x, y, z;
       if (isDisc) {
@@ -174,14 +151,18 @@ const OrnamentSystem = ({ mode }: { mode: AppMode }) => {
       target[i * 3 + 1] = y;
       target[i * 3 + 2] = z;
 
-      // --- 3. Colors ---
-      const color = palette[Math.floor(Math.random() * palette.length)];
+      // Color & Size
+      const isOrnament = Math.random() > 0.85;
+      const color = isOrnament 
+        ? ornamentColors[Math.floor(Math.random() * ornamentColors.length)]
+        : leafColors[Math.floor(Math.random() * leafColors.length)];
+      
       col[i * 3] = color.r;
       col[i * 3 + 1] = color.g;
       col[i * 3 + 2] = color.b;
       
-      // --- 4. Sizes ---
-      sz[i] = Math.random() < 0.7 ? (Math.random() * 0.8 + 0.6) : (Math.random() * 1.5 + 1.5);
+      // Increased base sizes for mobile visibility
+      sz[i] = isOrnament ? (Math.random() * 2.0 + 2.5) : (Math.random() * 1.5 + 1.2);
       
       rnd[i] = Math.random();
     }
@@ -191,7 +172,8 @@ const OrnamentSystem = ({ mode }: { mode: AppMode }) => {
 
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
-    uExpand: { value: 0 }
+    uExpand: { value: 0 },
+    uPixelRatio: { value: typeof window !== 'undefined' ? window.devicePixelRatio : 1.0 }
   }), []);
 
   useFrame((state, delta) => {
@@ -199,6 +181,7 @@ const OrnamentSystem = ({ mode }: { mode: AppMode }) => {
     uniforms.uTime.value = state.clock.elapsedTime;
     const targetExpand = mode === AppMode.TREE ? 0 : 1;
     uniforms.uExpand.value = THREE.MathUtils.lerp(uniforms.uExpand.value, targetExpand, delta * 2.0);
+    uniforms.uPixelRatio.value = state.gl.getPixelRatio();
   });
 
   return (
@@ -214,10 +197,9 @@ const OrnamentSystem = ({ mode }: { mode: AppMode }) => {
         vertexShader={particleVertexShader}
         fragmentShader={particleFragmentShader}
         uniforms={uniforms}
-        transparent={true}
-        depthWrite={false}
-        blending={THREE.AdditiveBlending}
-        // VertexColors handled manually via aColor attribute
+        transparent={false} // 实心渲染，避免透明度问题导致看不清
+        depthWrite={true}   // 开启深度写入，正确遮挡
+        blending={THREE.NormalBlending} // 正常混合，非叠加
         vertexColors={false}
       />
     </points>
@@ -249,7 +231,7 @@ const PhotoPlane: React.FC<PhotoPlaneProps> = ({ data, index, mode, activeIndex 
 
   const treePos = useMemo(() => {
     const y = (Math.random() - 0.5) * 8;
-    const r = (5 - y) * 0.35 + 0.5; // Slightly offset from core
+    const r = (5 - y) * 0.35 + 0.6;
     const angle = y * 5 + index;
     return new THREE.Vector3(Math.cos(angle) * r, y, Math.sin(angle) * r);
   }, [index]);
@@ -262,7 +244,7 @@ const PhotoPlane: React.FC<PhotoPlaneProps> = ({ data, index, mode, activeIndex 
 
     if (mode === AppMode.TREE) {
       targetPos.copy(treePos);
-      targetScale = 0; // Hide photos in tree mode initially, or set to small value
+      targetScale = 0; // Hide photos in tree mode
     } else if (mode === AppMode.CLOUD) {
       targetPos.copy(cloudPos);
       targetScale = 1.8;
@@ -326,7 +308,12 @@ interface SceneProps {
 
 const Scene: React.FC<SceneProps> = ({ mode, handState, photos, activePhotoIndex }) => {
   const groupRef = useRef<THREE.Group>(null);
+  const { viewport } = useThree();
   
+  // Mobile check
+  const isMobile = viewport.width < 5.0;
+  const responsiveScale = isMobile ? 0.65 : 1.0;
+
   useFrame((state) => {
     if (!groupRef.current) return;
     
@@ -347,29 +334,28 @@ const Scene: React.FC<SceneProps> = ({ mode, handState, photos, activePhotoIndex
       <PerspectiveCamera makeDefault position={[0, 0, 26]} />
       <Environment preset="city" />
       
-      {/* 极低的环境光和点光源强度，实现暗调效果 */}
-      <ambientLight intensity={0.002} />
-      <pointLight position={[10, 10, 10]} intensity={0.05} color="#FFD700" />
+      {/* 显著提升灯光亮度，确保手机上可见 */}
+      <ambientLight intensity={0.8} />
+      <pointLight position={[10, 10, 10]} intensity={1.5} color="#FFD700" />
+      <pointLight position={[-10, 5, 10]} intensity={1.0} color="#FFFFFF" />
       
-      <group ref={groupRef}>
+      <group ref={groupRef} scale={[responsiveScale, responsiveScale, responsiveScale]}>
         <OrnamentSystem mode={mode} />
         
         <Suspense fallback={null}>
             <PhotoGroup photos={photos} mode={mode} activeIndex={activePhotoIndex} />
         </Suspense>
         
-        {/* Tree Top Star - Dimmed Significantly */}
+        {/* Tree Top Star */}
         <mesh position={[0, 7.5, 0]} visible={mode === AppMode.TREE}>
            <octahedronGeometry args={[0.6]} />
-           <meshBasicMaterial color="#FFFFE0" toneMapped={false} />
-           <pointLight intensity={0.3} distance={10} color="#FFD700" decay={2} />
+           <meshBasicMaterial color="#FFD700" /> 
+           <pointLight intensity={1.0} distance={15} color="#FFD700" decay={2} />
         </mesh>
       </group>
 
       <EffectComposer enableNormalPass={false}>
-        {/* 提高阈值至 0.85，降低强度至 0.4，仅高亮部分微弱发光 */}
-        <Bloom luminanceThreshold={0.85} mipmapBlur intensity={0.4} radius={0.5} />
-        <Vignette eskil={false} offset={0.1} darkness={1.0} />
+         <Vignette eskil={false} offset={0.1} darkness={0.8} />
       </EffectComposer>
     </>
   );
