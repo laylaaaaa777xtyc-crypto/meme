@@ -14,6 +14,7 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
   const handLandmarkerRef = useRef<HandLandmarker | null>(null);
   const requestRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const lastPredictionTime = useRef<number>(0);
 
   // Initialize MediaPipe (Load model once)
   useEffect(() => {
@@ -42,7 +43,14 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
     if (isCameraOn) {
       const startCamera = async () => {
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          // 优化：限制分辨率以减少计算压力，提高帧率
+          const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              width: { ideal: 640 },
+              height: { ideal: 480 },
+              frameRate: { ideal: 30 }
+            } 
+          });
           streamRef.current = stream;
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
@@ -91,7 +99,7 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
 
   // Prediction Loop
   const predictWebcam = () => {
-    if (!isCameraOn) return; // Stop loop if turned off
+    if (!isCameraOn) return; 
     if (!handLandmarkerRef.current || !videoRef.current || !canvasRef.current) return;
     
     // Check if video is actually playing and has data
@@ -99,6 +107,16 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
        requestRef.current = requestAnimationFrame(predictWebcam);
        return;
     }
+
+    // 优化：节流检测频率 (Throttle)
+    // Three.js 渲染非常消耗资源，我们将手势检测限制在每 50ms 一次 (~20FPS)
+    // 这样可以避免主线程阻塞，消除卡顿
+    const now = performance.now();
+    if (now - lastPredictionTime.current < 50) {
+        requestRef.current = requestAnimationFrame(predictWebcam);
+        return;
+    }
+    lastPredictionTime.current = now;
 
     const startTimeMs = performance.now();
     const results = handLandmarkerRef.current.detectForVideo(videoRef.current, startTimeMs);
@@ -136,6 +154,8 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
       const pinkyOpen = isFingerExtended(20, 18);
 
       const openCount = [thumbOpen, indexOpen, middleOpen, ringOpen, pinkyOpen].filter(Boolean).length;
+      
+      // Pinch detection (Index tip to Thumb tip)
       const dPinch = Math.hypot(landmarks[8].x - landmarks[4].x, landmarks[8].y - landmarks[4].y);
       const isPinching = dPinch < 0.05;
 
@@ -143,6 +163,7 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
       
       if (openCount <= 1 && !isPinching) gesture = 'Closed_Fist';
       else if (openCount >= 4) gesture = 'Open_Palm';
+      else if (indexOpen && !middleOpen && !ringOpen && !pinkyOpen) gesture = 'Pointing_Up';
       
       onHandUpdate({
         gesture,
