@@ -43,7 +43,6 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
     if (isCameraOn) {
       const startCamera = async () => {
         try {
-          // 优化：限制分辨率以减少计算压力，提高帧率
           const stream = await navigator.mediaDevices.getUserMedia({ 
             video: { 
               width: { ideal: 640 },
@@ -58,12 +57,10 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
           }
         } catch (err) {
           console.error("Camera error:", err);
-          // You might want to notify parent about error here
         }
       };
       startCamera();
     } else {
-      // Stop Camera
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
@@ -74,13 +71,11 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
       if (requestRef.current) {
         cancelAnimationFrame(requestRef.current);
       }
-      // Reset hand state
       onHandUpdate({
          gesture: 'Unknown',
          isPinching: false,
          handPosition: { x: 0.5, y: 0.5 }
       });
-      // Clear canvas
       const canvasCtx = canvasRef.current?.getContext('2d');
       if (canvasCtx && canvasRef.current) {
          canvasCtx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
@@ -102,15 +97,11 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
     if (!isCameraOn) return; 
     if (!handLandmarkerRef.current || !videoRef.current || !canvasRef.current) return;
     
-    // Check if video is actually playing and has data
     if (videoRef.current.readyState < 2) {
        requestRef.current = requestAnimationFrame(predictWebcam);
        return;
     }
 
-    // 优化：节流检测频率 (Throttle)
-    // Three.js 渲染非常消耗资源，我们将手势检测限制在每 50ms 一次 (~20FPS)
-    // 这样可以避免主线程阻塞，消除卡顿
     const now = performance.now();
     if (now - lastPredictionTime.current < 50) {
         requestRef.current = requestAnimationFrame(predictWebcam);
@@ -133,7 +124,7 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
       }
     }
 
-    // Logic to determine gestures (Same as before)
+    // Logic to determine gestures
     if (results.landmarks && results.landmarks.length > 0) {
       const landmarks = results.landmarks[0];
       const wrist = landmarks[0];
@@ -141,10 +132,13 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
       const handX = 1 - ((wrist.x + middleKnuckle.x) / 2); // Mirror X
       const handY = (wrist.y + middleKnuckle.y) / 2;
 
+      // 优化 1: 更严格的手指伸直检测
+      // 使用指尖到手腕距离 vs PIP(第二关节)到手腕距离
+      // 乘以 1.1 作为缓冲，防止半弯曲状态被判定为伸直
       const isFingerExtended = (tipIdx: number, pipIdx: number) => {
-         const dTip = Math.hypot(landmarks[tipIdx].x - landmarks[0].x, landmarks[tipIdx].y - landmarks[0].y);
-         const dPip = Math.hypot(landmarks[pipIdx].x - landmarks[0].x, landmarks[pipIdx].y - landmarks[0].y);
-         return dTip > dPip;
+         const dTip = Math.hypot(landmarks[tipIdx].x - wrist.x, landmarks[tipIdx].y - wrist.y);
+         const dPip = Math.hypot(landmarks[pipIdx].x - wrist.x, landmarks[pipIdx].y - wrist.y);
+         return dTip > (dPip * 1.15); 
       };
 
       const thumbOpen = isFingerExtended(4, 2);
@@ -153,17 +147,42 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
       const ringOpen = isFingerExtended(16, 14);
       const pinkyOpen = isFingerExtended(20, 18);
 
-      const openCount = [thumbOpen, indexOpen, middleOpen, ringOpen, pinkyOpen].filter(Boolean).length;
+      // 计算除大拇指外伸直的手指数量
+      const fingersOpenCount = [indexOpen, middleOpen, ringOpen, pinkyOpen].filter(Boolean).length;
       
-      // Pinch detection (Index tip to Thumb tip)
+      // 优化 2: 捏合检测 (Pinch) - 提高优先级
+      // 食指尖(8) 与 拇指尖(4) 的距离
       const dPinch = Math.hypot(landmarks[8].x - landmarks[4].x, landmarks[8].y - landmarks[4].y);
-      const isPinching = dPinch < 0.05;
+      // 阈值设为 0.06，根据经验值微调
+      const isPinching = dPinch < 0.06;
 
       let gesture: GestureState['gesture'] = 'Unknown';
       
-      if (openCount <= 1 && !isPinching) gesture = 'Closed_Fist';
-      else if (openCount >= 4) gesture = 'Open_Palm';
-      else if (indexOpen && !middleOpen && !ringOpen && !pinkyOpen) gesture = 'Pointing_Up';
+      // 逻辑判定树 (互斥性增强)
+
+      if (isPinching) {
+        // 如果在捏合，强制不是 Closed_Fist。
+        // 捏合时，手指可能弯曲，容易误判为拳头。
+        // 这里我们不给 gesture 赋值 'Closed_Fist'，而是保持 Unknown 或其他
+        // App.tsx 会根据 isPinching 状态进入 ZOOM 模式
+        gesture = 'Unknown';
+      } 
+      else if (fingersOpenCount === 0 && !indexOpen && !isPinching) {
+        // 握拳 (Closed Fist):
+        // 1. 食指、中指、无名指、小指都必须弯曲 (fingersOpenCount === 0)
+        // 2. 没有捏合 (!isPinching)
+        // 3. 食指必须明确是弯曲的 (!indexOpen) - 双重保险
+        gesture = 'Closed_Fist';
+      }
+      else if (fingersOpenCount >= 3) {
+        // 张开手掌 (Open Palm):
+        // 至少3根手指（不含大拇指）伸直。通常是4根。
+        gesture = 'Open_Palm';
+      }
+      else if (indexOpen && !middleOpen && !ringOpen && !pinkyOpen) {
+        // 向上指
+        gesture = 'Pointing_Up';
+      }
       
       onHandUpdate({
         gesture,
