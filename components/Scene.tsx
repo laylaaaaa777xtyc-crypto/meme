@@ -189,8 +189,8 @@ const OrnamentSystem = ({ mode }: { mode: AppMode }) => {
       col[i * 3 + 2] = color.b;
       
       // --- 4. Sizes ---
-      // 稍微调小平均尺寸
-      sz[i] = Math.random() < 0.8 ? (Math.random() * 0.6 + 0.2) : (Math.random() * 1.2 + 0.8);
+      // 增大粒子尺寸以补偿相机距离
+      sz[i] = Math.random() < 0.8 ? (Math.random() * 0.8 + 0.4) : (Math.random() * 1.5 + 1.2);
       
       rnd[i] = Math.random();
     }
@@ -277,11 +277,12 @@ const PhotoPlane: React.FC<PhotoPlaneProps> = ({ data, index, mode, activeIndex 
       meshRef.current.lookAt(0,0,15); 
     } else if (mode === AppMode.ZOOM) {
       if (index === activeIndex) {
-        // Position exactly in center (x=0, y=0)
-        // Camera is at Z=16. Placing at Z=10 gives distance of 6.
-        targetPos.set(0, 0, 10); 
-        targetScale = 5.0;
-        // Rotation will be reset to 0 below
+        // Position centered
+        // Camera is at Z=24. 
+        // Old Value: Z=18 (Dist 6) -> Too Close
+        // New Value: Z=14 (Dist 10) -> Better overview
+        targetPos.set(0, 0, 14); 
+        targetScale = 4.2; // Slightly smaller to fit screen
       } else {
         targetPos.copy(cloudPos).multiplyScalar(3.0); 
         targetScale = 0;
@@ -293,7 +294,6 @@ const PhotoPlane: React.FC<PhotoPlaneProps> = ({ data, index, mode, activeIndex 
     
     if (mode === AppMode.ZOOM && index === activeIndex) {
         // In zoom mode, reset rotation to face screen directly
-        // The parent group will rotate to (0,0,0) as well.
         meshRef.current.rotation.set(0, 0, 0);
     } else {
        // Floating effect
@@ -344,7 +344,7 @@ const Scene: React.FC<SceneProps> = ({ mode, handState, photos, activePhotoIndex
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 0, 16]} />
+      <PerspectiveCamera makeDefault position={[0, 0, 24]} />
       <Environment preset="city" />
       
       {/* Lights - Further reduced intensity */}
