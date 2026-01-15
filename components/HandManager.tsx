@@ -12,7 +12,7 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [loaded, setLoaded] = useState(false);
   const handLandmarkerRef = useRef<HandLandmarker | null>(null);
-  const requestRef = useRef<number>();
+  const requestRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   // Initialize MediaPipe (Load model once)

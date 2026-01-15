@@ -297,7 +297,7 @@ const Scene: React.FC<SceneProps> = ({ mode, handState, photos, activePhotoIndex
       </group>
 
       {/* 调整 Post Processing：更柔和的 Bloom */}
-      <EffectComposer disableNormalPass>
+      <EffectComposer enableNormalPass={false}>
         <Bloom luminanceThreshold={0.5} mipmapBlur intensity={0.6} radius={0.5} />
         <Vignette eskil={false} offset={0.1} darkness={1.1} />
       </EffectComposer>
