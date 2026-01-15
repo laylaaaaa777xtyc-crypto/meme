@@ -61,8 +61,8 @@ const UIOverlay: React.FC<UIProps> = ({
           <h1 className="text-3xl md:text-4xl christmas-text mb-1 tracking-widest pt-2">
             指尖圣诞魔法
           </h1>
-          <p className="text-gray-400 text-xs mt-1 max-w-md font-sans tracking-wide opacity-80 pl-1">
-            用手势唤醒沉睡的圣诞精灵
+          <p className="magical-subtitle text-sm md:text-lg mt-2 max-w-md pl-1">
+            ✨ 用手势唤醒沉睡的圣诞精灵 ✨
           </p>
         </div>
         
@@ -131,22 +131,26 @@ const UIOverlay: React.FC<UIProps> = ({
 
       </div>
 
-      {/* 3. Instructions (Bottom Center) - Moved up significantly */}
-      <div className={`absolute bottom-24 left-0 w-full flex justify-center items-center gap-6 md:gap-12 text-center transition-opacity duration-1000 z-20 ${isCameraOn ? 'opacity-100' : 'opacity-30 grayscale'}`}>
+      {/* 3. Instructions (Bottom Center) - Enhanced Visibility & Position */}
+      {/* Moved from bottom-24 to bottom-36 (mobile) / bottom-40 (desktop) */}
+      <div className={`absolute bottom-36 md:bottom-40 left-0 w-full flex justify-center items-center gap-8 md:gap-16 text-center transition-opacity duration-1000 z-20 ${isCameraOn ? 'opacity-100' : 'opacity-90'}`}>
+         {/* Background blur container for better text readability */}
+         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent h-48 -bottom-36 -z-10 pointer-events-none"></div>
+
          <InstructionCard 
             active={mode === AppMode.TREE && isCameraOn}
             icon="✊"
             label="握拳"
             desc="聚合"
          />
-         <div className="w-px h-8 md:h-12 bg-gradient-to-b from-transparent via-yellow-500/30 to-transparent"></div>
+         <div className="w-px h-10 md:h-14 bg-gradient-to-b from-transparent via-white/40 to-transparent"></div>
          <InstructionCard 
             active={mode === AppMode.CLOUD && isCameraOn}
             icon="🖐️"
             label="张开"
             desc="散开"
          />
-         <div className="w-px h-8 md:h-12 bg-gradient-to-b from-transparent via-yellow-500/30 to-transparent"></div>
+         <div className="w-px h-10 md:h-14 bg-gradient-to-b from-transparent via-white/40 to-transparent"></div>
          <InstructionCard 
             active={mode === AppMode.ZOOM && isCameraOn}
             icon="🤏"
@@ -159,10 +163,10 @@ const UIOverlay: React.FC<UIProps> = ({
 };
 
 const InstructionCard = ({ icon, label, desc, active }: { icon: string, label: string, desc: string, active: boolean }) => (
-  <div className={`transition-all duration-500 transform ${active ? 'opacity-100 scale-110 drop-shadow-[0_0_10px_rgba(255,215,0,0.5)]' : 'opacity-60 scale-90'}`}>
-    <div className="text-3xl md:text-5xl mb-1 md:mb-3 filter drop-shadow-lg">{icon}</div>
-    <div className={`font-bold text-sm md:text-lg ${active ? 'text-yellow-400' : 'text-gray-400'}`}>{label}</div>
-    <div className="text-[10px] md:text-xs text-gray-300 tracking-wide">{desc}</div>
+  <div className={`transition-all duration-500 transform ${active ? 'opacity-100 scale-125 drop-shadow-[0_0_15px_rgba(255,215,0,0.8)]' : 'opacity-90 scale-100'}`}>
+    <div className="text-4xl md:text-6xl mb-2 md:mb-3 filter drop-shadow-lg">{icon}</div>
+    <div className={`font-bold text-base md:text-xl tracking-wider ${active ? 'text-yellow-400' : 'text-gray-100'}`}>{label}</div>
+    <div className={`text-xs md:text-sm font-medium mt-1 ${active ? 'text-yellow-200' : 'text-gray-300'}`}>{desc}</div>
   </div>
 );
 

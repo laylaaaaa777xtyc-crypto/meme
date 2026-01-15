@@ -45,6 +45,36 @@
         animation: float-glow 4s ease-in-out infinite;
       }
 
+      /* Magical Subtitle Effect */
+      .magical-subtitle {
+        font-family: 'Mountains of Christmas', cursive;
+        font-weight: 700;
+        /* Silver to Gold gradient */
+        background: linear-gradient(
+          90deg, 
+          #9CA3AF 0%, 
+          #FCD34D 25%, 
+          #FFFFFF 50%, 
+          #FCD34D 75%, 
+          #9CA3AF 100%
+        );
+        background-size: 200% auto;
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: transparent; /* Fallback */
+        
+        animation: shimmer 3s linear infinite;
+        filter: drop-shadow(0 0 3px rgba(252, 211, 77, 0.4));
+        letter-spacing: 0.05em;
+      }
+
+      @keyframes shimmer {
+        to {
+          background-position: 200% center;
+        }
+      }
+
       @keyframes float-glow {
         0%, 100% {
           transform: translateY(0);
