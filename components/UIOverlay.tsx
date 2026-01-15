@@ -41,14 +41,24 @@ const UIOverlay: React.FC<UIProps> = ({
       
       {/* 1. Header Area (Top) */}
       <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-start z-20">
-        <div className="mt-1 relative">
-          <div className="absolute -top-5 left-1 flex gap-3 text-lg opacity-90">
+        <div className="mt-4 relative">
+          
+          {/* Fairy Lights Container - Hanging on the text */}
+          <div className="light-wire"></div>
+          <div className="light-bulb light-red" style={{ left: '10%' }}></div>
+          <div className="light-bulb light-gold" style={{ left: '25%' }}></div>
+          <div className="light-bulb light-green" style={{ left: '40%' }}></div>
+          <div className="light-bulb light-blue" style={{ left: '55%' }}></div>
+          <div className="light-bulb light-red" style={{ left: '70%' }}></div>
+          <div className="light-bulb light-gold" style={{ left: '85%' }}></div>
+
+          <div className="absolute -top-6 left-1 flex gap-3 text-lg opacity-90">
              <span className="animate-bounce-soft filter drop-shadow-lg">🦌</span>
              <span className="animate-bounce-soft delay-100 filter drop-shadow-lg">🎁</span>
              <span className="animate-bounce-soft delay-200 filter drop-shadow-lg">🧦</span>
              <span className="animate-bounce-soft delay-300 filter drop-shadow-lg">❄️</span>
           </div>
-          <h1 className="text-3xl md:text-4xl christmas-text mb-1 tracking-widest pt-1">
+          <h1 className="text-3xl md:text-4xl christmas-text mb-1 tracking-widest pt-2">
             指尖圣诞魔法
           </h1>
           <p className="text-gray-400 text-xs mt-1 max-w-md font-sans tracking-wide opacity-80 pl-1">
@@ -57,7 +67,7 @@ const UIOverlay: React.FC<UIProps> = ({
         </div>
         
         {isCameraOn && (
-          <div className="flex flex-col items-end gap-2 animate-fade-in-up scale-90 origin-top-right">
+          <div className="flex flex-col items-end gap-2 animate-fade-in-up scale-90 origin-top-right mt-2">
               <div className="bg-black/50 backdrop-blur-md px-3 py-1.5 rounded border border-white/20 text-white shadow-lg text-xs md:text-sm">
                   手势: <span className="font-bold text-yellow-400">{getGestureLabel(currentGesture)}</span>
               </div>
@@ -121,8 +131,8 @@ const UIOverlay: React.FC<UIProps> = ({
 
       </div>
 
-      {/* 3. Instructions (Bottom Center) */}
-      <div className={`absolute bottom-8 left-0 w-full flex justify-center items-center gap-6 md:gap-12 text-center transition-opacity duration-1000 z-20 ${isCameraOn ? 'opacity-100' : 'opacity-30 grayscale'}`}>
+      {/* 3. Instructions (Bottom Center) - Moved up significantly */}
+      <div className={`absolute bottom-24 left-0 w-full flex justify-center items-center gap-6 md:gap-12 text-center transition-opacity duration-1000 z-20 ${isCameraOn ? 'opacity-100' : 'opacity-30 grayscale'}`}>
          <InstructionCard 
             active={mode === AppMode.TREE && isCameraOn}
             icon="✊"

@@ -59,6 +59,9 @@ export default function App() {
         showToast("摄像头正在开启...");
     } else {
         showToast("摄像头已关闭");
+        // Reset to initial state
+        setMode(AppMode.TREE);
+        setActivePhotoIndex(null);
     }
   };
 
@@ -121,9 +124,9 @@ export default function App() {
         />
       </div>
 
-      {/* Toast Notification */}
+      {/* Toast Notification - Moved to top-right to avoid blocking title */}
       {toastMessage && (
-        <div className="absolute top-8 left-1/2 transform -translate-x-1/2 z-50 bg-white/10 backdrop-blur-md border border-yellow-500/50 text-yellow-200 px-6 py-3 rounded-full shadow-[0_0_20px_rgba(255,215,0,0.3)] animate-bounce transition-all">
+        <div className="absolute top-8 right-8 z-50 bg-white/10 backdrop-blur-md border border-yellow-500/50 text-yellow-200 px-6 py-3 rounded-full shadow-[0_0_20px_rgba(255,215,0,0.3)] animate-fade-in-down transition-all">
           {toastMessage}
         </div>
       )}
