@@ -10,76 +10,85 @@ interface HandManagerProps {
 const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [loaded, setLoaded] = useState(false);
   const handLandmarkerRef = useRef<HandLandmarker | null>(null);
   const requestRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const lastPredictionTime = useRef<number>(0);
+  const [modelLoaded, setModelLoaded] = useState(false);
 
-  // Initialize MediaPipe (Load model once)
+  // Initialize MediaPipe (Load model immediately on mount, independent of camera state)
   useEffect(() => {
     const init = async () => {
-      const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
-      );
-      
-      handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
-          delegate: "GPU"
-        },
-        runningMode: "VIDEO",
-        numHands: 1
-      });
-      setLoaded(true);
+      try {
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
+        );
+        
+        handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+            delegate: "GPU"
+          },
+          runningMode: "VIDEO",
+          numHands: 1
+        });
+        setModelLoaded(true);
+        console.log("Hand Model Loaded");
+      } catch (e) {
+        console.error("Error loading MediaPipe model:", e);
+      }
     };
     init();
   }, []);
 
   // Manage Camera Stream based on isCameraOn
+  // IMPROVED: Do NOT wait for modelLoaded here. Open camera immediately when user requests.
   useEffect(() => {
-    if (!loaded) return;
-
     if (isCameraOn) {
       const startCamera = async () => {
         try {
-          // 优化：限制分辨率以减少计算压力，提高帧率
+          // Use standard resolution for faster startup
           const stream = await navigator.mediaDevices.getUserMedia({ 
             video: { 
-              width: { ideal: 640 },
-              height: { ideal: 480 },
+              width: 640,
+              height: 480,
               frameRate: { ideal: 30 }
             } 
           });
           streamRef.current = stream;
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
+            // The 'loadeddata' event will trigger the prediction loop
+            // The prediction loop will simply do nothing until the model is ready
             videoRef.current.addEventListener('loadeddata', predictWebcam);
           }
         } catch (err) {
           console.error("Camera error:", err);
-          // You might want to notify parent about error here
         }
       };
       startCamera();
     } else {
-      // Stop Camera
+      // Cleanup logic
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
       }
       if (videoRef.current) {
         videoRef.current.srcObject = null;
+        videoRef.current.removeEventListener('loadeddata', predictWebcam);
       }
       if (requestRef.current) {
         cancelAnimationFrame(requestRef.current);
+        requestRef.current = null;
       }
-      // Reset hand state
+      
+      // Reset state
       onHandUpdate({
          gesture: 'Unknown',
          isPinching: false,
          handPosition: { x: 0.5, y: 0.5 }
       });
+      
       // Clear canvas
       const canvasCtx = canvasRef.current?.getContext('2d');
       if (canvasCtx && canvasRef.current) {
@@ -88,6 +97,7 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
     }
 
     return () => {
+      // Cleanup on unmount
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
@@ -95,24 +105,28 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
         cancelAnimationFrame(requestRef.current);
       }
     };
-  }, [isCameraOn, loaded]);
+  }, [isCameraOn]); // Dependency is ONLY isCameraOn, not modelLoaded
 
   // Prediction Loop
   const predictWebcam = () => {
     if (!isCameraOn) return; 
-    if (!handLandmarkerRef.current || !videoRef.current || !canvasRef.current) return;
+    if (!videoRef.current || !canvasRef.current) return;
     
-    // Check if video is actually playing and has data
+    // If model isn't loaded yet, keep looping but don't process. 
+    // This allows the camera to be visible while the "brain" loads.
+    if (!handLandmarkerRef.current) {
+      requestRef.current = requestAnimationFrame(predictWebcam);
+      return;
+    }
+
+    // Ensure video is playing and has data
     if (videoRef.current.readyState < 2) {
        requestRef.current = requestAnimationFrame(predictWebcam);
        return;
     }
 
-    // 优化：节流检测频率 (Throttle)
-    // Three.js 渲染非常消耗资源，我们将手势检测限制在每 50ms 一次 (~20FPS)
-    // 这样可以避免主线程阻塞，消除卡顿
     const now = performance.now();
-    if (now - lastPredictionTime.current < 50) {
+    if (now - lastPredictionTime.current < 40) { // Approx 25fps cap for performance
         requestRef.current = requestAnimationFrame(predictWebcam);
         return;
     }
@@ -133,7 +147,7 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
       }
     }
 
-    // Logic to determine gestures (Same as before)
+    // Logic to determine gestures
     if (results.landmarks && results.landmarks.length > 0) {
       const landmarks = results.landmarks[0];
       const wrist = landmarks[0];
@@ -141,29 +155,38 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
       const handX = 1 - ((wrist.x + middleKnuckle.x) / 2); // Mirror X
       const handY = (wrist.y + middleKnuckle.y) / 2;
 
+      // Finger Extension Logic
       const isFingerExtended = (tipIdx: number, pipIdx: number) => {
-         const dTip = Math.hypot(landmarks[tipIdx].x - landmarks[0].x, landmarks[tipIdx].y - landmarks[0].y);
-         const dPip = Math.hypot(landmarks[pipIdx].x - landmarks[0].x, landmarks[pipIdx].y - landmarks[0].y);
-         return dTip > dPip;
+         const dTip = Math.hypot(landmarks[tipIdx].x - wrist.x, landmarks[tipIdx].y - wrist.y);
+         const dPip = Math.hypot(landmarks[pipIdx].x - wrist.x, landmarks[pipIdx].y - wrist.y);
+         return dTip > (dPip * 1.15); 
       };
 
-      const thumbOpen = isFingerExtended(4, 2);
       const indexOpen = isFingerExtended(8, 6);
       const middleOpen = isFingerExtended(12, 10);
       const ringOpen = isFingerExtended(16, 14);
       const pinkyOpen = isFingerExtended(20, 18);
 
-      const openCount = [thumbOpen, indexOpen, middleOpen, ringOpen, pinkyOpen].filter(Boolean).length;
+      const fingersOpenCount = [indexOpen, middleOpen, ringOpen, pinkyOpen].filter(Boolean).length;
       
-      // Pinch detection (Index tip to Thumb tip)
+      // Pinch Detection
       const dPinch = Math.hypot(landmarks[8].x - landmarks[4].x, landmarks[8].y - landmarks[4].y);
-      const isPinching = dPinch < 0.05;
+      const isPinching = dPinch < 0.06;
 
       let gesture: GestureState['gesture'] = 'Unknown';
       
-      if (openCount <= 1 && !isPinching) gesture = 'Closed_Fist';
-      else if (openCount >= 4) gesture = 'Open_Palm';
-      else if (indexOpen && !middleOpen && !ringOpen && !pinkyOpen) gesture = 'Pointing_Up';
+      if (isPinching) {
+        gesture = 'Unknown';
+      } 
+      else if (fingersOpenCount === 0 && !indexOpen && !isPinching) {
+        gesture = 'Closed_Fist';
+      }
+      else if (fingersOpenCount >= 3) {
+        gesture = 'Open_Palm';
+      }
+      else if (indexOpen && !middleOpen && !ringOpen && !pinkyOpen) {
+        gesture = 'Pointing_Up';
+      }
       
       onHandUpdate({
         gesture,
@@ -179,6 +202,12 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
     <div className={`absolute top-4 right-4 w-32 h-24 border border-white/20 rounded-lg overflow-hidden transition-opacity z-50 ${isCameraOn ? 'opacity-50 hover:opacity-100' : 'opacity-0 pointer-events-none'}`}>
       <video ref={videoRef} className="w-full h-full object-cover transform -scale-x-100" autoPlay playsInline muted />
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full transform -scale-x-100" width={128} height={96} />
+      {/* Loading Indicator for Model */}
+      {isCameraOn && !modelLoaded && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-[10px] text-white">
+          AI Loading...
+        </div>
+      )}
     </div>
   );
 };
