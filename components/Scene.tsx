@@ -42,7 +42,7 @@ const particleVertexShader = `
     // ============================
     
     // A. 螺旋上升旋转
-    float treeSpeed = 0.2; 
+    float treeSpeed = 0.15; 
     float treeTwist = posTree.y * 0.5; 
     float treeAngle = uTime * treeSpeed - treeTwist;
     posTree = rotateY(posTree, treeAngle);
@@ -77,23 +77,23 @@ const particleVertexShader = `
     // 5. 悬浮微动
     currentPos.y += sin(uTime * 0.5 + aRandom * 10.0) * 0.05; 
     
-    // 6. 闪烁特效 (Twinkle)
-    float twinkleSpeed = 2.0;
+    // 6. 闪烁特效 (Twinkle) - 调柔和
+    float twinkleSpeed = 1.5;
     float twinklePhase = uTime * twinkleSpeed + aRandom * 100.0;
     float twinkle = sin(twinklePhase); // -1 ~ 1
     
     // 粒子大小随闪烁变化
-    float sizeMod = 0.9 + 0.3 * twinkle; 
+    float sizeMod = 0.9 + 0.2 * twinkle; 
     
     vec4 mvPosition = modelViewMatrix * vec4(currentPos, 1.0);
     
     // 7. 大小计算 - 适配 DPR
-    // 增加基础大小倍率 (x1.5) 确保移动端可见
     gl_PointSize = (aSize * sizeMod * (800.0 / -mvPosition.z)) * uPixelRatio;
     gl_Position = projectionMatrix * mvPosition;
     
-    // 8. 透明度传递 - 稍微提升基础透明度，确保可见
-    vAlpha = 0.4 + 0.3 * twinkle; 
+    // 8. 透明度传递 - 降低整体不透明度，使光效更柔和
+    // 从 0.4+0.3 改为 0.25+0.25，减少刺眼的叠加白光
+    vAlpha = 0.25 + 0.25 * twinkle; 
   }
 `;
 
@@ -110,7 +110,8 @@ const particleFragmentShader = `
     
     // --- 辉光计算 ---
     float glow = 1.0 - (dist * 2.0);
-    glow = pow(glow, 2.0); // 稍微降低指数，让光晕范围更大一点点
+    // 增加指数 (从2.0提到3.0)，使光晕衰减更快，中心更亮边缘更柔，减少糊成一片的感觉
+    glow = pow(glow, 3.0); 
     
     gl_FragColor = vec4(vColor, glow * vAlpha); 
   }
@@ -129,13 +130,14 @@ const OrnamentSystem = ({ mode }: { mode: AppMode }) => {
     const sz = new Float32Array(count);
     const rnd = new Float32Array(count);
     
-    // Palette
+    // Palette - 调整为更柔和、饱和度稍低的颜色，避免叠加后过曝
     const palette = [
-      new THREE.Color('#FFD700'), // Gold
-      new THREE.Color('#FF4500'), // Orange Red
-      new THREE.Color('#DC143C'), // Crimson
-      new THREE.Color('#32CD32'), // Lime Green
-      new THREE.Color('#F0F8FF'), // Alice Blue
+      new THREE.Color('#F4C430'), // Saffron (Softer Gold)
+      new THREE.Color('#E27D60'), // Terracotta (Soft Red)
+      new THREE.Color('#C41E3A'), // Cardinal (Deep Red)
+      new THREE.Color('#55A630'), // Apple Green (Less Neon)
+      new THREE.Color('#87CEEB'), // Sky Blue
+      new THREE.Color('#E0E0E0'), // Light Grey/White (Softer than pure white)
     ];
 
     for (let i = 0; i < count; i++) {
@@ -202,7 +204,6 @@ const OrnamentSystem = ({ mode }: { mode: AppMode }) => {
     uniforms.uTime.value = state.clock.elapsedTime;
     const targetExpand = mode === AppMode.TREE ? 0 : 1;
     uniforms.uExpand.value = THREE.MathUtils.lerp(uniforms.uExpand.value, targetExpand, delta * 2.0);
-    // 确保 pixel ratio 在窗口变动时正确（虽然一般不变，但为了稳健）
     uniforms.uPixelRatio.value = Math.min(window.devicePixelRatio, 2);
   });
 
@@ -332,7 +333,6 @@ const Scene: React.FC<SceneProps> = ({ mode, handState, photos, activePhotoIndex
   const groupRef = useRef<THREE.Group>(null);
   const { viewport } = useThree();
   
-  // Responsive Scale: 移动端视口较窄，可能需要略微缩小或调整
   const responsiveScale = viewport.width < 5 ? 0.8 : 1.0;
 
   useFrame((state) => {
@@ -342,7 +342,6 @@ const Scene: React.FC<SceneProps> = ({ mode, handState, photos, activePhotoIndex
     let targetRotX = 0;
 
     if (mode !== AppMode.ZOOM) {
-      // 降低手势控制的灵敏度，使其更平滑
       targetRotY = (handState.handPosition.x - 0.5) * 1.5; 
       targetRotX = (handState.handPosition.y - 0.5) * 0.5;
     }
@@ -356,9 +355,9 @@ const Scene: React.FC<SceneProps> = ({ mode, handState, photos, activePhotoIndex
       <PerspectiveCamera makeDefault position={[0, 0, 26]} />
       <Environment preset="city" />
       
-      {/* 调整亮度：由于移动端可能较暗，稍微提升基础亮度和环境光 */}
-      <ambientLight intensity={0.1} />
-      <pointLight position={[10, 10, 10]} intensity={1.0} color="#FFD700" />
+      {/* 调整亮度：降低点光源强度，使整体更柔和 */}
+      <ambientLight intensity={0.2} />
+      <pointLight position={[10, 10, 10]} intensity={0.5} color="#FFD700" />
       
       <group ref={groupRef} scale={[responsiveScale, responsiveScale, responsiveScale]}>
         <OrnamentSystem mode={mode} />
@@ -367,18 +366,18 @@ const Scene: React.FC<SceneProps> = ({ mode, handState, photos, activePhotoIndex
             <PhotoGroup photos={photos} mode={mode} activeIndex={activePhotoIndex} />
         </Suspense>
         
-        {/* Tree Top Star */}
+        {/* Tree Top Star - 稍微降低强度 */}
         <mesh position={[0, 7.5, 0]} visible={mode === AppMode.TREE}>
            <octahedronGeometry args={[0.6]} />
            <meshBasicMaterial color="#FFFFE0" toneMapped={false} />
-           <pointLight intensity={0.8} distance={15} color="#FFD700" decay={2} />
+           <pointLight intensity={0.6} distance={15} color="#FFD700" decay={2} />
         </mesh>
       </group>
 
       <EffectComposer enableNormalPass={false}>
-        {/* Bloom 阈值降低到 0.6，确保在不同设备屏幕上都能看到光晕 */}
-        <Bloom luminanceThreshold={0.6} mipmapBlur intensity={0.5} radius={0.5} />
-        <Vignette eskil={false} offset={0.1} darkness={1.0} />
+        {/* Bloom 调整：提高阈值(0.8)只让高光亮，降低强度(0.3)减少刺眼感 */}
+        <Bloom luminanceThreshold={0.8} mipmapBlur intensity={0.3} radius={0.6} />
+        <Vignette eskil={false} offset={0.1} darkness={0.9} />
       </EffectComposer>
     </>
   );
