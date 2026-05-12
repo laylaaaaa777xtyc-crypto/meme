@@ -1,384 +1,371 @@
-import React, { useRef, useMemo, Suspense, useEffect } from 'react';
+import React, { useRef, useMemo, Suspense, useEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { PerspectiveCamera, Environment, useTexture } from '@react-three/drei';
+import { useTexture } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { AppMode, GestureState, PhotoData } from '../types';
 
-// --- SHADERS ---
+const IS_MOBILE = typeof navigator !== 'undefined'
+  && (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+    || (typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches));
 
-// 顶点着色器：增加螺旋、星系旋转和闪烁动画
-const particleVertexShader = `
+// ─── Particle tree ────────────────────────────────────────────────────────────
+
+const particleVert = `
+  precision highp float;
   uniform float uTime;
-  uniform float uExpand; // 0 = Tree, 1 = Cloud
-  uniform float uPixelRatio; // 像素比，用于适配移动端高清屏
-  
-  attribute vec3 aTargetPos; // 散开后的目标位置 (Cloud)
-  attribute float aSize;     // 粒子基础大小
-  attribute float aRandom;   // 随机因子 (0.0 - 1.0)
-  attribute vec3 aColor;     // 重命名颜色属性，避免冲突
-  
+  uniform float uExpand;
+  uniform float uPixelRatio;
+  uniform float uSizeScale;
+  attribute vec3 aTargetPos;
+  attribute float aSize;
+  attribute float aRandom;
+  attribute vec3 aColor;
   varying vec3 vColor;
-  varying float vAlpha;      // 传递给片元的透明度
-  
-  #define PI 3.14159265359
+  varying float vAlpha;
 
-  // 绕 Y 轴旋转函数
-  vec3 rotateY(vec3 v, float angle) {
-    float s = sin(angle);
-    float c = cos(angle);
-    return vec3(v.x * c + v.z * s, v.y, -v.x * s + v.z * c);
+  vec3 rotY(vec3 v, float a) {
+    return vec3(v.x*cos(a)+v.z*sin(a), v.y, -v.x*sin(a)+v.z*cos(a));
   }
 
   void main() {
     vColor = aColor;
-    
-    // --- 1. 基础位置读取 ---
-    vec3 posTree = position;
-    vec3 posCloud = aTargetPos;
-    
-    // ============================
-    // 2. 圣诞树形态：能量汇聚流光
-    // ============================
-    
-    // A. 螺旋上升旋转
-    float treeSpeed = 0.15; 
-    float treeTwist = posTree.y * 0.5; 
-    float treeAngle = uTime * treeSpeed - treeTwist;
-    posTree = rotateY(posTree, treeAngle);
-    
-    // B. 能量呼吸脉冲
-    float pulse = 1.0 + 0.02 * sin(uTime * 2.0 + posTree.y * 2.0);
-    posTree.x *= pulse;
-    posTree.z *= pulse;
-    
-    // ============================
-    // 3. 星云形态：星系漩涡
-    // ============================
-    
-    float distToCenter = length(posCloud.xz);
-    float galaxySpeed = 0.1;
-    float vortexAngle = (8.0 / (distToCenter + 0.5)) + (distToCenter * 0.1); 
-    float cloudRot = uTime * galaxySpeed + vortexAngle;
-    
-    float dir = aRandom > 0.5 ? 1.0 : 0.8; 
-    posCloud = rotateY(posCloud, cloudRot * dir);
-    
-    float wave = sin(distToCenter * 0.8 - uTime * 1.5);
-    posCloud.y += wave * 0.5;
-    
-    // ============================
-    // 4. 形态混合与后处理
-    // ============================
-    
-    float smoothExpand = smoothstep(0.0, 1.0, uExpand);
-    vec3 currentPos = mix(posTree, posCloud, smoothExpand);
-    
-    // 5. 悬浮微动
-    currentPos.y += sin(uTime * 0.5 + aRandom * 10.0) * 0.05; 
-    
-    // 6. 闪烁特效 (Twinkle) - 调柔和
-    float twinkleSpeed = 1.5;
-    float twinklePhase = uTime * twinkleSpeed + aRandom * 100.0;
-    float twinkle = sin(twinklePhase); // -1 ~ 1
-    
-    // 粒子大小随闪烁变化
-    float sizeMod = 0.9 + 0.2 * twinkle; 
-    
-    vec4 mvPosition = modelViewMatrix * vec4(currentPos, 1.0);
-    
-    // 7. 大小计算 - 适配 DPR
-    gl_PointSize = (aSize * sizeMod * (800.0 / -mvPosition.z)) * uPixelRatio;
-    gl_Position = projectionMatrix * mvPosition;
-    
-    // 8. 透明度传递 - 降低整体不透明度，使光效更柔和
-    // 从 0.4+0.3 改为 0.25+0.25，减少刺眼的叠加白光
-    vAlpha = 0.25 + 0.25 * twinkle; 
+    vec3 pT = rotY(position,  uTime*0.15 - position.y*0.5);
+    pT.x *= 1.0 + 0.02*sin(uTime*2.0 + pT.y*2.0);
+    pT.z *= 1.0 + 0.02*sin(uTime*2.0 + pT.y*2.0);
+
+    float d = length(aTargetPos.xz);
+    vec3 pC = rotY(aTargetPos, (uTime*0.1 + 8.0/(d+0.5) + d*0.1) * (aRandom > 0.5 ? 1.0 : 0.8));
+    pC.y += sin(d*0.8 - uTime*1.5)*0.5;
+
+    vec3 cur = mix(pT, pC, smoothstep(0.0,1.0,uExpand));
+    cur.y += sin(uTime*0.5 + aRandom*10.0)*0.05;
+
+    float twinkle = sin(uTime*1.5 + aRandom*100.0);
+    vec4 mv = modelViewMatrix * vec4(cur, 1.0);
+    float ps = aSize * (0.9+0.2*twinkle) * uSizeScale * (600.0/-mv.z) * uPixelRatio;
+    gl_PointSize = clamp(ps, 1.0, 48.0);
+    gl_Position = projectionMatrix * mv;
+    vAlpha = 0.30 + 0.30*twinkle;
   }
 `;
 
-// 片元着色器：柔和辉光
-const particleFragmentShader = `
+const particleFrag = `
+  precision mediump float;
   varying vec3 vColor;
   varying float vAlpha;
-  
   void main() {
-    vec2 coord = gl_PointCoord - vec2(0.5);
-    float dist = length(coord);
-    
-    if (dist > 0.5) discard;
-    
-    // --- 辉光计算 ---
-    float glow = 1.0 - (dist * 2.0);
-    // 增加指数 (从2.0提到3.0)，使光晕衰减更快，中心更亮边缘更柔，减少糊成一片的感觉
-    glow = pow(glow, 3.0); 
-    
-    gl_FragColor = vec4(vColor, glow * vAlpha); 
+    float d = length(gl_PointCoord - 0.5);
+    if (d > 0.5) discard;
+    gl_FragColor = vec4(vColor, pow(1.0-d*2.0, 3.0) * vAlpha);
   }
 `;
 
-// --- ORNAMENTS (Particle System) ---
-const OrnamentSystem = ({ mode }: { mode: AppMode }) => {
-  const pointsRef = useRef<THREE.Points>(null);
-  const count = 4500; 
-  const { viewport } = useThree();
-  
+const OrnamentSystem: React.FC<{ mode: AppMode }> = ({ mode }) => {
+  const ref  = useRef<THREE.Points>(null);
+  const count = IS_MOBILE ? 2000 : 5000;
+
   const { positions, targetPositions, colors, sizes, randoms } = useMemo(() => {
     const pos = new Float32Array(count * 3);
-    const target = new Float32Array(count * 3);
+    const tgt = new Float32Array(count * 3);
     const col = new Float32Array(count * 3);
-    const sz = new Float32Array(count);
+    const sz  = new Float32Array(count);
     const rnd = new Float32Array(count);
-    
-    // Palette - 调整为更柔和、饱和度稍低的颜色，避免叠加后过曝
+
+    // Pure warm-gold palette (matches reference image)
     const palette = [
-      new THREE.Color('#F4C430'), // Saffron (Softer Gold)
-      new THREE.Color('#E27D60'), // Terracotta (Soft Red)
-      new THREE.Color('#C41E3A'), // Cardinal (Deep Red)
-      new THREE.Color('#55A630'), // Apple Green (Less Neon)
-      new THREE.Color('#87CEEB'), // Sky Blue
-      new THREE.Color('#E0E0E0'), // Light Grey/White (Softer than pure white)
+      new THREE.Color('#FFFFFF'),   // bright white sparkle
+      new THREE.Color('#FFFBE8'),   // cream white
+      new THREE.Color('#FFE89A'),   // pale gold
+      new THREE.Color('#FFD700'),   // gold
+      new THREE.Color('#FFC040'),   // amber gold
+      new THREE.Color('#F4A300'),   // deep amber
+      new THREE.Color('#FFE0A0'),   // warm highlight
     ];
 
     for (let i = 0; i < count; i++) {
-      // --- 1. Tree Positions ---
-      const h = Math.random() * 14 - 7; 
-      const hNorm = (h + 7) / 14; 
-      const radiusMaxAtHeight = (1.0 - hNorm) * 6.5; 
-      
-      let rRatio = Math.sqrt(Math.random()); 
-      if (Math.random() > 0.5) rRatio = 0.4 + 0.6 * rRatio;
+      // Tree shape
+      const h = Math.random() * 14 - 7;
+      const hN = (h + 7) / 14;
+      const rMax = (1.0 - hN) * 6.5;
+      let rr = Math.sqrt(Math.random());
+      if (Math.random() > 0.5) rr = 0.4 + 0.6 * rr;
+      const r = rr * rMax;
+      const theta = h * 4.0 + Math.random() * Math.PI * 2;
+      pos[i*3] = Math.cos(theta)*r; pos[i*3+1] = h; pos[i*3+2] = Math.sin(theta)*r;
 
-      const r = rRatio * radiusMaxAtHeight;
-      const theta = h * 4.0 + Math.random() * Math.PI * 2; 
-
-      pos[i * 3] = Math.cos(theta) * r;
-      pos[i * 3 + 1] = h;
-      pos[i * 3 + 2] = Math.sin(theta) * r;
-
-      // --- 2. Galaxy Cloud Positions ---
-      const isDisc = Math.random() > 0.3;
-      let x, y, z;
-      if (isDisc) {
-         const rCloud = 4.0 + Math.pow(Math.random(), 2.0) * 18.0; 
-         const thetaCloud = Math.random() * Math.PI * 2;
-         y = (Math.random() - 0.5) * 3.0; 
-         x = rCloud * Math.cos(thetaCloud);
-         z = rCloud * Math.sin(thetaCloud);
+      // Cloud shape
+      if (Math.random() > 0.3) {
+        const rc = 4 + Math.pow(Math.random(), 2) * 18;
+        const tc = Math.random() * Math.PI * 2;
+        tgt[i*3] = rc*Math.cos(tc); tgt[i*3+1] = (Math.random()-.5)*3; tgt[i*3+2] = rc*Math.sin(tc);
       } else {
-         const rCloud = 14.0 + Math.random() * 10.0;
-         const thetaCloud = Math.random() * Math.PI * 2;
-         const phiCloud = Math.acos(2 * Math.random() - 1);
-         x = rCloud * Math.sin(phiCloud) * Math.cos(thetaCloud);
-         y = rCloud * Math.sin(phiCloud) * Math.sin(thetaCloud);
-         z = rCloud * Math.cos(phiCloud);
+        const rc = 14 + Math.random()*10, tc = Math.random()*Math.PI*2, phi = Math.acos(2*Math.random()-1);
+        tgt[i*3] = rc*Math.sin(phi)*Math.cos(tc); tgt[i*3+1] = rc*Math.sin(phi)*Math.sin(tc); tgt[i*3+2] = rc*Math.cos(phi);
       }
 
-      target[i * 3] = x;
-      target[i * 3 + 1] = y;
-      target[i * 3 + 2] = z;
-
-      // --- 3. Colors ---
-      const color = palette[Math.floor(Math.random() * palette.length)];
-      col[i * 3] = color.r;
-      col[i * 3 + 1] = color.g;
-      col[i * 3 + 2] = color.b;
-      
-      // --- 4. Sizes ---
-      sz[i] = Math.random() < 0.7 ? (Math.random() * 0.8 + 0.6) : (Math.random() * 1.5 + 1.5);
-      
+      const c = palette[Math.floor(Math.random() * palette.length)];
+      col[i*3] = c.r; col[i*3+1] = c.g; col[i*3+2] = c.b;
+      sz[i]  = Math.random() < 0.7 ? Math.random()*0.8+0.6 : Math.random()*1.5+1.5;
       rnd[i] = Math.random();
     }
-    
-    return { positions: pos, targetPositions: target, colors: col, sizes: sz, randoms: rnd };
-  }, []);
+    return { positions: pos, targetPositions: tgt, colors: col, sizes: sz, randoms: rnd };
+  }, [count]);
 
   const uniforms = useMemo(() => ({
-    uTime: { value: 0 },
-    uExpand: { value: 0 },
-    uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) } 
+    uTime:       { value: 0 },
+    uExpand:     { value: 0 },
+    uPixelRatio: { value: Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, IS_MOBILE ? 1.5 : 2) },
+    uSizeScale:  { value: IS_MOBILE ? 1.4 : 1.0 },
   }), []);
 
   useFrame((state, delta) => {
-    if (!pointsRef.current) return;
+    if (!ref.current) return;
     uniforms.uTime.value = state.clock.elapsedTime;
-    const targetExpand = mode === AppMode.TREE ? 0 : 1;
-    uniforms.uExpand.value = THREE.MathUtils.lerp(uniforms.uExpand.value, targetExpand, delta * 2.0);
-    uniforms.uPixelRatio.value = Math.min(window.devicePixelRatio, 2);
+    uniforms.uExpand.value = THREE.MathUtils.lerp(uniforms.uExpand.value, mode === AppMode.TREE ? 0 : 1, delta * 2);
   });
 
   return (
-    <points ref={pointsRef} frustumCulled={false}>
+    <points ref={ref} frustumCulled={false}>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" count={count} array={positions} itemSize={3} />
+        <bufferAttribute attach="attributes-position"   count={count} array={positions}      itemSize={3} />
         <bufferAttribute attach="attributes-aTargetPos" count={count} array={targetPositions} itemSize={3} />
-        <bufferAttribute attach="attributes-aColor" count={count} array={colors} itemSize={3} />
-        <bufferAttribute attach="attributes-aSize" count={count} array={sizes} itemSize={1} />
-        <bufferAttribute attach="attributes-aRandom" count={count} array={randoms} itemSize={1} />
+        <bufferAttribute attach="attributes-aColor"     count={count} array={colors}          itemSize={3} />
+        <bufferAttribute attach="attributes-aSize"      count={count} array={sizes}           itemSize={1} />
+        <bufferAttribute attach="attributes-aRandom"    count={count} array={randoms}         itemSize={1} />
       </bufferGeometry>
       <shaderMaterial
-        vertexShader={particleVertexShader}
-        fragmentShader={particleFragmentShader}
-        uniforms={uniforms}
-        transparent={true}
-        depthWrite={false}
-        blending={THREE.AdditiveBlending}
-        vertexColors={false}
+        vertexShader={particleVert} fragmentShader={particleFrag}
+        uniforms={uniforms} transparent depthWrite={false} blending={THREE.AdditiveBlending}
       />
     </points>
   );
 };
 
-// --- PHOTOS ---
-interface PhotoPlaneProps {
-  data: PhotoData;
-  index: number;
-  mode: AppMode;
-  activeIndex: number | null;
-}
+// ─── Light strand (螺旋灯串) ──────────────────────────────────────────────────
+
+const strandVert = `
+  precision highp float;
+  uniform float uTime;
+  attribute float aPhase;
+  attribute vec3 aColor;
+  varying float vBright;
+  varying vec3  vColor;
+
+  void main() {
+    vColor = aColor;
+
+    /* Each bulb twinkles at its own phase */
+    float t = sin(uTime * 2.4 + aPhase);
+    vBright = 0.30 + 0.70 * (t * 0.5 + 0.5);
+
+    /* The whole strand slowly co-rotates with the tree */
+    float rot = uTime * 0.13;
+    float s = sin(rot), c = cos(rot);
+    vec3 p = vec3(position.x*c + position.z*s,
+                  position.y,
+                 -position.x*s + position.z*c);
+
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    /* Bulbs are noticeably larger than background particles */
+    float ps = clamp(280.0 / -mv.z * (0.6 + 0.5*vBright), 2.0, 18.0);
+    gl_PointSize = ps;
+    gl_Position  = projectionMatrix * mv;
+  }
+`;
+
+const strandFrag = `
+  precision mediump float;
+  varying float vBright;
+  varying vec3  vColor;
+
+  void main() {
+    vec2  c = gl_PointCoord - 0.5;
+    float d = length(c);
+    if (d > 0.5) discard;
+
+    /* Bright core + soft halo */
+    float core = pow(max(0.0, 1.0 - d * 3.5), 1.8);   /* tight bright centre */
+    float halo = pow(max(0.0, 1.0 - d * 2.0), 2.4);   /* wider soft glow     */
+    float glow = clamp(core + halo * 0.55, 0.0, 1.0);
+
+    gl_FragColor = vec4(vColor * 1.5, glow * vBright);
+  }
+`;
+
+const LightStrand: React.FC = () => {
+  const ref   = useRef<THREE.Points>(null);
+  const count = IS_MOBILE ? 110 : 220;
+
+  const { positions, phases, colors } = useMemo(() => {
+    const pos = new Float32Array(count * 3);
+    const ph  = new Float32Array(count);
+    const col = new Float32Array(count * 3);
+
+    /* Weighted bulb colour palette – classic Christmas */
+    const bulbs: Array<{ hex: string; w: number }> = [
+      { hex: '#FFFFFF', w: 0.30 },  // bright white
+      { hex: '#FFE89A', w: 0.28 },  // warm gold
+      { hex: '#FFD700', w: 0.12 },  // pure gold
+      { hex: '#FF4444', w: 0.15 },  // red
+      { hex: '#44DD55', w: 0.10 },  // green
+      { hex: '#66AAFF', w: 0.05 },  // cool blue accent
+    ];
+
+    for (let i = 0; i < count; i++) {
+      const t    = i / count;                          // 0 → 1  (bottom to top)
+      const h    = t * 15.0 - 7.5;                    // full tree height
+      const hN   = Math.max(0, Math.min(1, (h + 7) / 14));
+      const treeR = (1.0 - hN) * 6.5;
+      /* Sit slightly inside the outer edge of the particle tree */
+      const r    = Math.max(0.1, treeR * 0.80);
+      const angle = t * Math.PI * 2 * 10;             // 10 spiral turns
+
+      pos[i*3]   = Math.cos(angle) * r;
+      pos[i*3+1] = h;
+      pos[i*3+2] = Math.sin(angle) * r;
+
+      ph[i] = Math.random() * Math.PI * 2;
+
+      /* Pick colour from weighted list */
+      const roll = Math.random();
+      let acc = 0, chosen = '#FFFFFF';
+      for (const { hex, w } of bulbs) { acc += w; if (roll < acc) { chosen = hex; break; } }
+      const c = new THREE.Color(chosen);
+      col[i*3] = c.r; col[i*3+1] = c.g; col[i*3+2] = c.b;
+    }
+    return { positions: pos, phases: ph, colors: col };
+  }, [count]);
+
+  const uniforms = useMemo(() => ({ uTime: { value: 0 } }), []);
+
+  useFrame(state => { uniforms.uTime.value = state.clock.elapsedTime; });
+
+  return (
+    <points ref={ref} frustumCulled={false}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" count={count} array={positions} itemSize={3} />
+        <bufferAttribute attach="attributes-aPhase"   count={count} array={phases}    itemSize={1} />
+        <bufferAttribute attach="attributes-aColor"   count={count} array={colors}    itemSize={3} />
+      </bufferGeometry>
+      <shaderMaterial
+        vertexShader={strandVert} fragmentShader={strandFrag}
+        uniforms={uniforms} transparent depthWrite={false}
+        blending={THREE.AdditiveBlending}
+      />
+    </points>
+  );
+};
+
+// ─── Photo plane (3D, used in CLOUD / ZOOM modes) ─────────────────────────────
+
+interface PhotoPlaneProps { data: PhotoData; index: number; mode: AppMode; activeIndex: number | null; }
 
 const PhotoPlane: React.FC<PhotoPlaneProps> = ({ data, index, mode, activeIndex }) => {
-  const texture = useTexture(data.url);
-  const meshRef = useRef<THREE.Mesh>(null);
-  
+  const texture   = useTexture(data.url);
+  const groupRef  = useRef<THREE.Group>(null);
+
   const cloudPos = useMemo(() => {
-    const r = 8 + Math.random() * 5;
-    const theta = Math.random() * Math.PI * 2;
-    const phi = Math.acos(2 * Math.random() - 1);
-    return new THREE.Vector3(
-      r * Math.sin(phi) * Math.cos(theta),
-      r * Math.sin(phi) * Math.sin(theta),
-      r * Math.cos(phi)
-    );
+    const r = 8 + Math.random()*5, t = Math.random()*Math.PI*2, phi = Math.acos(2*Math.random()-1);
+    return new THREE.Vector3(r*Math.sin(phi)*Math.cos(t), r*Math.sin(phi)*Math.sin(t), r*Math.cos(phi));
   }, []);
 
   const treePos = useMemo(() => {
-    const y = (Math.random() - 0.5) * 8;
-    const r = (5 - y) * 0.35 + 0.5; // Slightly offset from core
-    const angle = y * 5 + index;
-    return new THREE.Vector3(Math.cos(angle) * r, y, Math.sin(angle) * r);
+    const y = (Math.random()-.5)*8, r = (5-y)*0.35+0.5, a = y*5+index;
+    return new THREE.Vector3(Math.cos(a)*r, y, Math.sin(a)*r);
   }, [index]);
 
+  const tmpP = useMemo(() => new THREE.Vector3(), []);
+  const tmpS = useMemo(() => new THREE.Vector3(), []);
+
   useFrame((state, delta) => {
-    if (!meshRef.current) return;
-    
-    let targetPos = new THREE.Vector3();
-    let targetScale = 0.8;
-
+    const g = groupRef.current; if (!g) return;
     if (mode === AppMode.TREE) {
-      targetPos.copy(treePos);
-      targetScale = 0; // Hide photos in tree mode initially
+      tmpP.copy(treePos); tmpS.set(0, 0, 1); // hidden in TREE (HTML polaroids shown instead)
     } else if (mode === AppMode.CLOUD) {
-      targetPos.copy(cloudPos);
-      targetScale = 1.8;
-      meshRef.current.lookAt(0,0,15); 
+      tmpP.copy(cloudPos); tmpS.set(1.8, 1.8, 1);
+      g.lookAt(0, 0, 15);
     } else if (mode === AppMode.ZOOM) {
-      if (index === activeIndex) {
-        targetPos.set(0, 0, 16); 
-        targetScale = 5.0; 
-      } else {
-        targetPos.copy(cloudPos).multiplyScalar(3.0); 
-        targetScale = 0;
-      }
+      if (index === activeIndex) { tmpP.set(0, 0, 16); tmpS.set(5, 5, 1); g.rotation.set(0,0,0); }
+      else { tmpP.copy(cloudPos).multiplyScalar(3); tmpS.set(0,0,1); }
     }
-
-    meshRef.current.position.lerp(targetPos, delta * 3);
-    meshRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, 1), delta * 3);
-    
-    if (mode === AppMode.ZOOM && index === activeIndex) {
-        meshRef.current.rotation.set(0, 0, 0);
-    } else {
-       meshRef.current.rotation.z += delta * 0.05;
-       meshRef.current.rotation.y += delta * 0.05;
-    }
+    g.position.lerp(tmpP, delta*3);
+    g.scale.lerp(tmpS, delta*3);
+    if (mode === AppMode.CLOUD) { g.rotation.z += delta*0.04; }
   });
 
   return (
-    <mesh ref={meshRef}>
-      <planeGeometry args={[1, 1]} />
-      <meshBasicMaterial map={texture} side={THREE.DoubleSide} transparent />
-      <mesh position={[0,0,-0.01]}>
-         <planeGeometry args={[1.05, 1.05]} />
-         <meshBasicMaterial color="#FFD700" />
+    <group ref={groupRef}>
+      {/* White polaroid background */}
+      <mesh position={[0, 0, -0.01]}>
+        <planeGeometry args={[1.15, 1.4]} />
+        <meshBasicMaterial color="#F5F0E8" />
       </mesh>
-    </mesh>
+      {/* Photo */}
+      <mesh position={[0, 0.13, 0]}>
+        <planeGeometry args={[1.0, 1.0]} />
+        <meshBasicMaterial map={texture} side={THREE.DoubleSide} transparent />
+      </mesh>
+    </group>
   );
 };
 
-const PhotoGroup: React.FC<{ photos: PhotoData[], mode: AppMode, activeIndex: number | null }> = ({ photos, mode, activeIndex }) => {
-  return (
-    <>
-      {photos.map((photo, i) => (
-        <PhotoPlane 
-          key={photo.id} 
-          data={photo} 
-          index={i} 
-          mode={mode} 
-          activeIndex={activeIndex} 
-        />
-      ))}
-    </>
+const PhotoGroup: React.FC<{ photos: PhotoData[]; mode: AppMode; activeIndex: number | null }> =
+  ({ photos, mode, activeIndex }) => (
+    <>{photos.map((p, i) => <PhotoPlane key={p.id} data={p} index={i} mode={mode} activeIndex={activeIndex} />)}</>
   );
-};
 
-// --- MAIN SCENE ---
-interface SceneProps {
-  mode: AppMode;
-  handState: GestureState;
-  photos: PhotoData[];
-  activePhotoIndex: number | null;
-}
+// ─── Scene root ───────────────────────────────────────────────────────────────
+
+interface SceneProps { mode: AppMode; handState: GestureState; photos: PhotoData[]; activePhotoIndex: number | null; }
 
 const Scene: React.FC<SceneProps> = ({ mode, handState, photos, activePhotoIndex }) => {
   const groupRef = useRef<THREE.Group>(null);
-  const { viewport } = useThree();
-  
-  const responsiveScale = viewport.width < 5 ? 0.8 : 1.0;
+  const { viewport, camera, size } = useThree();
+  const [postOk] = useState(!IS_MOBILE);
 
-  useFrame((state) => {
-    if (!groupRef.current) return;
-    
-    let targetRotY = 0;
-    let targetRotX = 0;
+  useEffect(() => {
+    const p = camera as THREE.PerspectiveCamera;
+    const aspect = size.width / size.height;
+    p.position.z = aspect < 1 ? 26 + (1-aspect)*18 : 26;
+    p.updateProjectionMatrix();
+  }, [size.width, size.height, camera]);
 
-    if (mode !== AppMode.ZOOM) {
-      targetRotY = (handState.handPosition.x - 0.5) * 1.5; 
-      targetRotX = (handState.handPosition.y - 0.5) * 0.5;
-    }
-    
-    groupRef.current.rotation.y = THREE.MathUtils.lerp(groupRef.current.rotation.y, targetRotY, 0.05);
-    groupRef.current.rotation.x = THREE.MathUtils.lerp(groupRef.current.rotation.x, targetRotX, 0.05);
+  const scale = viewport.width < 5 ? 0.75 : viewport.width < 8 ? 0.9 : 1.0;
+
+  useFrame(() => {
+    if (!groupRef.current || mode === AppMode.ZOOM) return;
+    groupRef.current.rotation.y = THREE.MathUtils.lerp(groupRef.current.rotation.y, (handState.handPosition.x-.5)*1.5, 0.05);
+    groupRef.current.rotation.x = THREE.MathUtils.lerp(groupRef.current.rotation.x, (handState.handPosition.y-.5)*0.5, 0.05);
   });
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 0, 26]} />
-      <Environment preset="city" />
-      
-      {/* 调整亮度：降低点光源强度，使整体更柔和 */}
-      <ambientLight intensity={0.2} />
-      <pointLight position={[10, 10, 10]} intensity={0.5} color="#FFD700" />
-      
-      <group ref={groupRef} scale={[responsiveScale, responsiveScale, responsiveScale]}>
+      <ambientLight intensity={0.3} />
+      <pointLight position={[0, 10, 10]} intensity={0.6} color="#FFD700" />
+
+      <group ref={groupRef} scale={[scale, scale, scale]}>
         <OrnamentSystem mode={mode} />
-        
+        <LightStrand />
+
         <Suspense fallback={null}>
-            <PhotoGroup photos={photos} mode={mode} activeIndex={activePhotoIndex} />
+          <PhotoGroup photos={photos} mode={mode} activeIndex={activePhotoIndex} />
         </Suspense>
-        
-        {/* Tree Top Star - 稍微降低强度 */}
+
+        {/* Star topper */}
         <mesh position={[0, 7.5, 0]} visible={mode === AppMode.TREE}>
-           <octahedronGeometry args={[0.6]} />
-           <meshBasicMaterial color="#FFFFE0" toneMapped={false} />
-           <pointLight intensity={0.6} distance={15} color="#FFD700" decay={2} />
+          <octahedronGeometry args={[0.55]} />
+          <meshBasicMaterial color="#FFFFF0" toneMapped={false} />
+          <pointLight intensity={0.7} distance={14} color="#FFE060" decay={2} />
         </mesh>
       </group>
 
-      <EffectComposer enableNormalPass={false}>
-        {/* Bloom 调整：提高阈值(0.8)只让高光亮，降低强度(0.3)减少刺眼感 */}
-        <Bloom luminanceThreshold={0.8} mipmapBlur intensity={0.3} radius={0.6} />
-        <Vignette eskil={false} offset={0.1} darkness={0.9} />
-      </EffectComposer>
+      {postOk && (
+        <EffectComposer enableNormalPass={false}>
+          <Bloom luminanceThreshold={0.75} mipmapBlur intensity={0.4} radius={0.65} />
+          <Vignette eskil={false} offset={0.1} darkness={0.92} />
+        </EffectComposer>
+      )}
     </>
   );
 };

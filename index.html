@@ -2,150 +2,153 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>手势圣诞树</title>
-    <!-- Tailwind CSS (CDN for simplicity) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>光语许愿树</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Playfair+Display:ital@0;1&family=Mountains+of+Christmas:wght@700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Playfair+Display:ital@0;1&display=swap" rel="stylesheet">
     <style>
-      body { margin: 0; background: #000; overflow: hidden; }
-      /* Custom scrollbar */
-      ::-webkit-scrollbar { width: 6px; }
-      ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
-
-      /* Christmas Snow-Capped Text Effect */
-      .christmas-text {
-        font-family: 'Cinzel Decorative', cursive;
-        
-        /* Gradient: Top White (Snow), Middle Red, Bottom Green */
-        background: linear-gradient(
-          180deg, 
-          #ffffff 0%, 
-          #ffffff 35%, 
-          #d42426 35%, 
-          #d42426 70%, 
-          #165b33 70%, 
-          #165b33 100%
-        );
-        background-size: 100% 100%;
-        
-        -webkit-background-clip: text;
-        background-clip: text;
-        -webkit-text-fill-color: transparent;
-        color: transparent;
-
-        /* Gold Stroke */
-        -webkit-text-stroke: 1px #ffd700;
-        
-        /* Glow Effect */
-        filter: drop-shadow(0 0 5px rgba(212, 36, 38, 0.6));
-        
-        animation: float-glow 4s ease-in-out infinite;
+      html, body {
+        margin: 0; padding: 0; background: #0d0600;
+        overflow: hidden; height: 100%; height: 100dvh;
+        -webkit-tap-highlight-color: transparent;
+        overscroll-behavior: none;
+        touch-action: none;
       }
+      #root { height: 100%; height: 100dvh; }
+      .touch-none { touch-action: none; -webkit-user-select: none; user-select: none; }
+      .font-serif-custom { font-family: 'Playfair Display', serif; }
 
-      /* Magical Subtitle Effect */
-      .magical-subtitle {
-        font-family: 'Mountains of Christmas', cursive;
+      /* ── 标题 ── */
+      .wish-title {
+        font-size: clamp(1.55rem, 6.5vw, 2.2rem);
         font-weight: 700;
-        /* Silver to Gold gradient */
-        background: linear-gradient(
-          90deg, 
-          #9CA3AF 0%, 
-          #FCD34D 25%, 
-          #FFFFFF 50%, 
-          #FCD34D 75%, 
-          #9CA3AF 100%
-        );
-        background-size: 200% auto;
-        -webkit-background-clip: text;
-        background-clip: text;
-        -webkit-text-fill-color: transparent;
-        color: transparent; /* Fallback */
-        
-        animation: shimmer 3s linear infinite;
-        filter: drop-shadow(0 0 3px rgba(252, 211, 77, 0.4));
-        letter-spacing: 0.05em;
+        color: #FFD700;
+        text-shadow:
+          0 0 6px  rgba(255,215,0,1),
+          0 0 18px rgba(255,165,0,0.8),
+          0 0 36px rgba(255,130,0,0.45);
+        letter-spacing: 0.2em;
+        animation: wish-pulse 3.5s ease-in-out infinite;
+      }
+      @keyframes wish-pulse {
+        0%,100% { text-shadow: 0 0 6px rgba(255,215,0,1), 0 0 18px rgba(255,165,0,0.8), 0 0 36px rgba(255,130,0,0.45); }
+        50%      { text-shadow: 0 0 12px rgba(255,230,0,1),0 0 30px rgba(255,185,0,1),   0 0 55px rgba(255,140,0,0.6); }
       }
 
-      @keyframes shimmer {
-        to {
-          background-position: 200% center;
-        }
+      .wish-subtitle {
+        font-size: clamp(0.6rem, 2.3vw, 0.76rem);
+        color: rgba(255,255,255,0.6);
+        letter-spacing: 0.2em;
       }
 
-      @keyframes float-glow {
-        0%, 100% {
-          transform: translateY(0);
-          filter: drop-shadow(0 0 5px rgba(212, 36, 38, 0.5));
-        }
-        50% {
-          transform: translateY(-5px);
-          filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.8));
-        }
+      /* ── 星星装饰 ── */
+      .sdeco { display:inline-block; color:#FFD700; font-size:0.7rem; animation:sdeco-twinkle 2s ease-in-out infinite; text-shadow:0 0 5px rgba(255,215,0,0.9); }
+      .sdeco.d1{animation-delay:0.3s} .sdeco.d2{animation-delay:0.7s}
+      .sdeco.d3{animation-delay:1.1s} .sdeco.d4{animation-delay:1.6s}
+      @keyframes sdeco-twinkle {
+        0%,100%{ opacity:.45; transform:scale(.8); }
+        50%    { opacity:1;   transform:scale(1.25); }
       }
 
-      /* Bouncing decoration animation */
-      .animate-bounce-soft {
-        animation: bounce-soft 2s infinite;
-      }
-      .delay-100 { animation-delay: 0.1s; }
-      .delay-200 { animation-delay: 0.2s; }
-      .delay-300 { animation-delay: 0.3s; }
-
-      @keyframes bounce-soft {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-4px); }
-      }
-
-      .font-serif-custom {
-        font-family: 'Playfair Display', serif;
-      }
-
-      /* Fairy Lights Styles */
-      .light-wire {
-        position: absolute;
-        top: -12px;
-        left: -10px;
-        right: -10px;
-        height: 20px;
-        border-bottom: 2px solid rgba(255, 255, 255, 0.2);
-        border-radius: 50%;
-        z-index: 10;
+      /* ── 宝丽来相框 ── */
+      .polaroid {
+        background: #fff;
+        padding: 5px 5px 24px;
+        box-shadow: 3px 5px 20px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08);
         pointer-events: none;
+        position: relative;
       }
-      
-      .light-bulb {
+      .polaroid-tape {
         position: absolute;
-        top: 18px; /* Hang from the wire */
-        width: 8px;
-        height: 12px;
-        border-radius: 50% 50% 40% 40%;
-        animation: flash 1.5s infinite alternate ease-in-out;
-      }
-      
-      /* Bulb Holder */
-      .light-bulb::before {
-        content: '';
-        position: absolute;
-        top: -3px;
-        left: 2px;
-        width: 4px;
-        height: 4px;
-        background: #444;
+        top: -7px; left: 50%;
+        transform: translateX(-50%) rotate(-1.5deg);
+        width: 32px; height: 13px;
+        background: rgba(255,218,70,0.62);
         border-radius: 2px;
       }
 
-      .light-red { background: #ff3333; box-shadow: 0 0 8px #ff3333; animation-delay: 0s; }
-      .light-green { background: #33ff33; box-shadow: 0 0 8px #33ff33; animation-delay: 0.4s; }
-      .light-gold { background: #ffd700; box-shadow: 0 0 8px #ffd700; animation-delay: 0.8s; }
-      .light-blue { background: #33ccff; box-shadow: 0 0 8px #33ccff; animation-delay: 1.2s; }
-
-      @keyframes flash {
-        0% { opacity: 0.4; transform: scale(0.9); box-shadow: 0 0 2px currentColor; }
-        100% { opacity: 1; transform: scale(1.1); box-shadow: 0 0 12px currentColor; }
+      /* ── 音乐按钮 ── */
+      .music-btn {
+        width: 2.3rem; height: 2.3rem; border-radius:50%;
+        border: 1.5px solid rgba(255,215,0,0.55);
+        background: rgba(0,0,0,0.55); backdrop-filter:blur(8px);
+        display:flex; align-items:center; justify-content:center;
+        cursor:pointer; color:#FFD700;
+        transition: border-color .2s, box-shadow .2s;
       }
+      .music-btn:hover { border-color:rgba(255,215,0,0.9); box-shadow:0 0 10px rgba(255,215,0,0.4); }
+
+      /* ── 动作按钮 green / gold ── */
+      .abtn-green {
+        width:3.3rem; height:3.3rem; border-radius:50%;
+        background: radial-gradient(circle at 40% 35%, #3a9a3a, #004800);
+        border:1.5px solid rgba(80,200,80,0.45);
+        box-shadow: 0 0 14px rgba(0,160,0,0.55), 0 0 30px rgba(0,110,0,0.3);
+        display:flex; align-items:center; justify-content:center; cursor:pointer;
+        transition: transform .2s;
+      }
+      .abtn-green:active { transform:scale(.93); }
+
+      .abtn-gold {
+        width:3.3rem; height:3.3rem; border-radius:50%;
+        background: radial-gradient(circle at 40% 35%, #FFE040, #B8860B);
+        border:1.5px solid rgba(255,230,100,0.6);
+        box-shadow: 0 0 14px rgba(255,200,0,0.55), 0 0 30px rgba(180,140,0,0.3);
+        display:flex; align-items:center; justify-content:center; cursor:pointer;
+        transition: transform .2s;
+      }
+      .abtn-gold:active { transform:scale(.93); }
+
+      /* ── 暖金棕色散景背景 ── */
+      .warm-bg {
+        background-color: #0d0600;
+        background-image:
+          /* 顶部暖光（天花板灯光） */
+          radial-gradient(ellipse 160% 55% at 50% -8%,  rgba(185,105,18,0.42) 0%, transparent 100%),
+          /* 左侧墙壁暖光 */
+          radial-gradient(ellipse 48% 110% at -8%  50%, rgba(155, 82,12,0.28) 0%, transparent 100%),
+          /* 右侧墙壁暖光 */
+          radial-gradient(ellipse 48% 110% at 108% 50%, rgba(155, 82,12,0.28) 0%, transparent 100%),
+          /* 地面树根光晕 */
+          radial-gradient(ellipse 65% 22%  at 50% 102%, rgba(210,125,12,0.38) 0%, transparent 100%),
+          /* 散景光点 1 */
+          radial-gradient(circle 9% at 19% 19%, rgba(215,145,42,0.24) 0%, transparent 100%),
+          /* 散景光点 2 */
+          radial-gradient(circle 7% at 77% 17%, rgba(205,132,36,0.20) 0%, transparent 100%),
+          /* 散景光点 3 */
+          radial-gradient(circle 5% at 11% 54%, rgba(185,112,26,0.16) 0%, transparent 100%),
+          /* 散景光点 4 */
+          radial-gradient(circle 5% at 89% 47%, rgba(192,118,30,0.16) 0%, transparent 100%),
+          /* 散景光点 5 */
+          radial-gradient(circle 4% at 63%  9%, rgba(225,155,48,0.22) 0%, transparent 100%),
+          /* 散景光点 6 */
+          radial-gradient(circle 3% at 34% 13%, rgba(205,132,36,0.16) 0%, transparent 100%),
+          /* 中央深色区（让树更突出） */
+          radial-gradient(ellipse 55% 70% at 50% 45%, rgba(0,0,0,0.35) 0%, transparent 100%);
+      }
+
+      /* 动态浮动散景点（CSS 动画） */
+      .bokeh-wrap { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+      .bk {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(18px);
+        animation: bk-float 6s ease-in-out infinite;
+        opacity: 0;
+      }
+      @keyframes bk-float {
+        0%,100% { opacity:0;    transform: scale(0.8) translateY(0px); }
+        40%      { opacity:0.28; transform: scale(1.1) translateY(-8px); }
+        60%      { opacity:0.22; transform: scale(1.05) translateY(-4px); }
+      }
+
+      ::-webkit-scrollbar { width:6px; }
+      ::-webkit-scrollbar-track { background:transparent; }
+      ::-webkit-scrollbar-thumb { background:#444; border-radius:3px; }
     </style>
   <script type="importmap">
 {
@@ -166,7 +169,6 @@
 </head>
   <body>
     <div id="root"></div>
-    <!-- CRITICAL: This script tag is required for Vite to build the app -->
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>
