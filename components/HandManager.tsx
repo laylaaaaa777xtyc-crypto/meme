@@ -16,14 +16,14 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
   const lastPredictionTime = useRef<number>(0);
   const [modelLoaded, setModelLoaded] = useState(false);
 
-  // Initialize MediaPipe (Load model immediately on mount, independent of camera state)
+  // Initialize MediaPipe lazily — only when camera is first turned on
   useEffect(() => {
+    if (!isCameraOn || handLandmarkerRef.current) return;
     const init = async () => {
       try {
         const vision = await FilesetResolver.forVisionTasks(
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
         );
-        
         handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
@@ -33,13 +33,12 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
           numHands: 1
         });
         setModelLoaded(true);
-        console.log("Hand Model Loaded");
       } catch (e) {
         console.error("Error loading MediaPipe model:", e);
       }
     };
     init();
-  }, []);
+  }, [isCameraOn]);
 
   // Manage Camera Stream based on isCameraOn
   // IMPROVED: Do NOT wait for modelLoaded here. Open camera immediately when user requests.

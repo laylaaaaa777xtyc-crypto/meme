@@ -146,6 +146,85 @@
         60%      { opacity:0.22; transform: scale(1.05) translateY(-4px); }
       }
 
+      /* ── 左侧金色摄像头按钮 ── */
+      .cam-gold-btn {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+      }
+      .cam-gold-circle {
+        width: 5.2rem; height: 5.2rem;
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        background: radial-gradient(circle at 38% 34%, #FFE555, #B07800);
+        border: 2px solid rgba(255,225,80,0.7);
+        box-shadow: 0 0 22px rgba(255,205,0,0.75), 0 0 48px rgba(180,140,0,0.45);
+        animation: cam-gold-pulse 2.2s ease-in-out infinite;
+        transition: transform .15s;
+      }
+      .cam-gold-circle:active { transform: scale(.9) !important; animation: none; }
+
+      @keyframes cam-gold-pulse {
+        0%,100% { transform: scale(1);    box-shadow: 0 0 22px rgba(255,205,0,0.75), 0 0 48px rgba(180,140,0,0.45); }
+        50%      { transform: scale(1.14); box-shadow: 0 0 36px rgba(255,225,0,1),    0 0 72px rgba(200,160,0,0.55); }
+      }
+      .cam-gold-ring {
+        position: absolute; inset: -7px; border-radius: 50%;
+        border: 2px solid rgba(255,215,0,0.65);
+        animation: cam-gold-ring 2s ease-out infinite;
+        pointer-events: none;
+      }
+      .cam-gold-ring.r2 { animation-delay: 0.65s; }
+      .cam-gold-ring.r3 { animation-delay: 1.3s; }
+      @keyframes cam-gold-ring {
+        0%   { transform: scale(1);   opacity: 0.8; }
+        100% { transform: scale(2.0); opacity: 0; }
+      }
+      /* 已开启：暗金 */
+      .cam-gold-on .cam-gold-circle {
+        background: radial-gradient(circle at 38% 34%, #9a6600, #4a3000);
+        border-color: rgba(160,110,10,0.5);
+        box-shadow: 0 0 10px rgba(140,90,0,0.35);
+        animation: none;
+        transform: scale(1);
+      }
+
+      /* ── 气泡提示 ── */
+      .cam-bubble {
+        position: absolute;
+        left: calc(100% + 14px);
+        top: 2.6rem;
+        transform: translateY(-50%);
+        background: rgba(255,234,80,0.95);
+        color: rgba(12,6,0,0.88);
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        padding: 6px 12px;
+        border-radius: 20px;
+        white-space: nowrap;
+        box-shadow: 0 2px 16px rgba(255,200,0,0.6), 0 0 0 1.5px rgba(255,235,100,0.45);
+        animation: bubble-float 1.6s ease-in-out infinite;
+        pointer-events: none;
+      }
+      .cam-bubble::before {
+        content: '';
+        position: absolute;
+        right: 100%;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 0; height: 0;
+        border: 6px solid transparent;
+        border-right-color: rgba(255,234,80,0.95);
+      }
+      @keyframes bubble-float {
+        0%,100% { transform: translateY(-50%) translateX(0px);  }
+        50%      { transform: translateY(-50%) translateX(5px);  }
+      }
+
       ::-webkit-scrollbar { width:6px; }
       ::-webkit-scrollbar-track { background:transparent; }
       ::-webkit-scrollbar-thumb { background:#444; border-radius:3px; }

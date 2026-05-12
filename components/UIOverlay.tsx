@@ -150,18 +150,52 @@ const UIOverlay: React.FC<UIProps> = ({
         </div>
       </div>
 
-      {/* Desktop: camera toggle (tucked left-center, small) */}
+      {/* ── 左侧金色摄像头按钮 ── */}
       {!isMobile && (
-        <button
+        <div
+          className={`pointer-events-auto absolute left-4 z-30 cam-gold-btn ${isCameraOn ? 'cam-gold-on' : ''}`}
+          style={{ top: '50%', transform: 'translateY(-50%)' }}
           onClick={onToggleCamera}
-          className="pointer-events-auto absolute top-1/2 left-3 -translate-y-1/2 z-30 w-8 h-8 rounded-full border border-white/20 bg-black/45 backdrop-blur-sm flex items-center justify-center text-white/50 hover:text-white/80 hover:border-white/35 transition-all"
-          title={isCameraOn ? '关闭摄像头' : '开启手势'}
         >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M23 7 16 12 23 17V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>
-            {isCameraOn && <line x1="1" y1="1" x2="23" y2="23"/>}
-          </svg>
-        </button>
+          {/* 扩散光环（未开启时显示） */}
+          {!isCameraOn && (
+            <>
+              <span className="cam-gold-ring"    />
+              <span className="cam-gold-ring r2" />
+              <span className="cam-gold-ring r3" />
+            </>
+          )}
+
+          {/* 圆形按钮 */}
+          <div className="cam-gold-circle">
+            {isCameraOn ? (
+              /* 已开启：摄像头划线图标 */
+              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="rgba(255,210,80,0.9)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 7 16 12 23 17V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>
+                <line x1="1" y1="1" x2="23" y2="23"/>
+              </svg>
+            ) : (
+              /* 未开启：摄像头图标 */
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="rgba(20,10,0,0.85)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 7 16 12 23 17V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>
+              </svg>
+            )}
+          </div>
+
+          {/* 气泡提示（未开启时显示） */}
+          {!isCameraOn && (
+            <div className="cam-bubble">点击开始～</div>
+          )}
+
+          {/* 文字标签 */}
+          <span
+            className="text-[11px] font-bold tracking-wide"
+            style={{ color: isCameraOn ? 'rgba(200,150,30,0.75)' : 'rgba(255,220,60,0.95)',
+                     textShadow: '0 0 8px rgba(255,200,0,0.5)' }}
+          >
+            {isCameraOn ? '关闭' : '开启手势'}
+          </span>
+        </div>
       )}
 
       {/* Gesture label when camera on (desktop) */}
