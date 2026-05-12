@@ -150,18 +150,52 @@ const UIOverlay: React.FC<UIProps> = ({
         </div>
       </div>
 
-      {/* Desktop: camera toggle (tucked left-center, small) */}
+      {/* Camera toggle — desktop only, left-center, prominent with pulse */}
       {!isMobile && (
-        <button
+        <div
+          className={`pointer-events-auto absolute left-4 z-30 cam-btn ${isCameraOn ? 'cam-on' : 'cam-off'}`}
+          style={{ top: '50%', transform: 'translateY(-50%)' }}
           onClick={onToggleCamera}
-          className="pointer-events-auto absolute top-1/2 left-3 -translate-y-1/2 z-30 w-8 h-8 rounded-full border border-white/20 bg-black/45 backdrop-blur-sm flex items-center justify-center text-white/50 hover:text-white/80 hover:border-white/35 transition-all"
-          title={isCameraOn ? '关闭摄像头' : '开启手势'}
         >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M23 7 16 12 23 17V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>
-            {isCameraOn && <line x1="1" y1="1" x2="23" y2="23"/>}
-          </svg>
-        </button>
+          {/* Expanding rings (only when off) */}
+          {!isCameraOn && (
+            <>
+              <span className="cam-ring"    />
+              <span className="cam-ring r2" />
+              <span className="cam-ring r3" />
+            </>
+          )}
+
+          {/* Circle */}
+          <div className="cam-circle">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 7 16 12 23 17V7z"/>
+              <rect x="1" y="5" width="15" height="14" rx="2"/>
+              {isCameraOn && <line x1="1" y1="1" x2="23" y2="23" stroke="white" strokeWidth="2"/>}
+            </svg>
+          </div>
+
+          {/* Label */}
+          <span className="text-[10px] font-semibold tracking-wide"
+            style={{ color: isCameraOn ? 'rgba(200,150,40,0.8)' : 'rgba(255,215,0,0.95)',
+                     textShadow: '0 0 8px rgba(255,200,0,0.6)' }}>
+            {isCameraOn ? '关闭' : '摄像头'}
+          </span>
+
+          {/* Golden hand hint — only when camera is off */}
+          {!isCameraOn && (
+            <div className="cam-hint absolute left-[calc(100%+8px)] top-1/2 -translate-y-1/2">
+              {/* pointing hand */}
+              <span style={{ fontSize: '1.3rem', filter: 'drop-shadow(0 0 6px rgba(255,200,0,0.8))', color: '#FFD700' }}>
+                👆
+              </span>
+              <div className="flex flex-col leading-tight">
+                <span className="text-[9px] font-bold" style={{ color:'#FFD700', textShadow:'0 0 6px rgba(255,200,0,0.7)' }}>点击</span>
+                <span className="text-[9px]"            style={{ color:'rgba(255,215,0,0.7)' }}>开启</span>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Gesture label when camera on (desktop) */}
