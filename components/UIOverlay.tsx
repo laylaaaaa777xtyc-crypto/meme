@@ -170,13 +170,13 @@ const UIOverlay: React.FC<UIProps> = ({
           <div className="cam-gold-circle">
             {isCameraOn ? (
               /* 已开启：摄像头划线图标 */
-              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="rgba(255,210,80,0.9)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="rgba(255,210,80,0.9)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M23 7 16 12 23 17V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>
                 <line x1="1" y1="1" x2="23" y2="23"/>
               </svg>
             ) : (
               /* 未开启：摄像头图标 */
-              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="rgba(20,10,0,0.85)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="rgba(20,10,0,0.88)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M23 7 16 12 23 17V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>
               </svg>
             )}
@@ -189,9 +189,9 @@ const UIOverlay: React.FC<UIProps> = ({
 
           {/* 文字标签 */}
           <span
-            className="text-[11px] font-bold tracking-wide"
-            style={{ color: isCameraOn ? 'rgba(200,150,30,0.75)' : 'rgba(255,220,60,0.95)',
-                     textShadow: '0 0 8px rgba(255,200,0,0.5)' }}
+            className="text-[12px] font-bold tracking-wide"
+            style={{ color: isCameraOn ? 'rgba(200,150,30,0.75)' : 'rgba(255,225,60,0.95)',
+                     textShadow: '0 0 10px rgba(255,200,0,0.6)' }}
           >
             {isCameraOn ? '关闭' : '开启手势'}
           </span>
