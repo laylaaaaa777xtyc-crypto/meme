@@ -12,7 +12,7 @@ const IS_MOBILE = typeof navigator !== 'undefined'
 
 const DEFAULT_PHOTOS: PhotoData[] = Array.from({ length: 8 }).map((_, i) => ({
   id: `def-${i}`,
-  url: `https://picsum.photos/150/150?random=${i + 10}`,
+  url: `https://picsum.photos/500/500?random=${i + 10}`,
   aspectRatio: 1,
 }));
 
