@@ -21,3 +21,11 @@ export interface PhotoData {
   url: string;
   aspectRatio: number;
 }
+
+export interface WishOrb {
+  id: string;
+  x: number;   // normalized 0–1 (left → right)
+  y: number;   // normalized 0–1 (top → bottom)
+  wish: string;
+  lightMessage: string;
+}

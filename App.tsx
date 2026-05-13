@@ -4,7 +4,9 @@ import { Loader } from '@react-three/drei';
 import Scene from './components/Scene';
 import UIOverlay from './components/UIOverlay';
 import HandManager from './components/HandManager';
-import { AppMode, PhotoData, GestureState } from './types';
+import WishDialog from './components/WishDialog';
+import WishOrbLayer from './components/WishOrbLayer';
+import { AppMode, PhotoData, GestureState, WishOrb } from './types';
 
 const IS_MOBILE = typeof navigator !== 'undefined'
   && (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
@@ -23,7 +25,11 @@ export default function App() {
   const [isCameraOn, setIsCameraOn]         = useState(false);
   const [toastMessage, setToastMessage]     = useState<string | null>(null);
   const [glLost, setGlLost]                 = useState(false);
+  const [wishes, setWishes]                 = useState<WishOrb[]>([]);
+  const [wishDialogOpen, setWishDialogOpen] = useState(false);
+  const [wishTapPos, setWishTapPos]         = useState({ x: 0.5, y: 0.5 });
   const sceneContainerRef                   = useRef<HTMLDivElement>(null);
+  const wishDialogOpenRef                   = useRef(false);
 
   const [handState, setHandState] = useState<GestureState>({
     gesture: 'Unknown',
@@ -59,6 +65,17 @@ export default function App() {
     setIsCameraOn(next);
     if (next) showToast('摄像头正在开启...');
     else { showToast('摄像头已关闭'); setMode(AppMode.TREE); setActivePhotoIndex(null); }
+  };
+
+  useEffect(() => { wishDialogOpenRef.current = wishDialogOpen; }, [wishDialogOpen]);
+
+  const handleWishSubmit = (wish: string, lightMessage: string) => {
+    setWishDialogOpen(false);
+    setWishes(prev => {
+      const orb: WishOrb = { id: `wish-${Date.now()}`, x: wishTapPos.x, y: wishTapPos.y, wish, lightMessage };
+      const next = [...prev, orb];
+      return next.length > 30 ? next.slice(next.length - 30) : next;
+    });
   };
 
   // Camera gesture → mode
@@ -105,7 +122,14 @@ export default function App() {
         } else {
           setMode(prev => {
             if (prev === AppMode.ZOOM) { setActivePhotoIndex(null); return AppMode.CLOUD; }
-            return prev === AppMode.TREE ? AppMode.CLOUD : AppMode.TREE;
+            if (prev === AppMode.TREE) {
+              if (!wishDialogOpenRef.current) {
+                setWishTapPos({ x: startX / window.innerWidth, y: startY / window.innerHeight });
+                setWishDialogOpen(true);
+              }
+              return prev;
+            }
+            return AppMode.TREE;
           });
           setActivePhotoIndex(null);
         }
@@ -180,6 +204,29 @@ export default function App() {
 
       <HandManager onHandUpdate={setHandState} isCameraOn={isCameraOn} isMobile={IS_MOBILE} />
 
+      {/* Wish orb HTML layer */}
+      <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 25 }}>
+        <WishOrbLayer orbs={wishes} />
+      </div>
+
+      {/* First-use hint */}
+      {mode === AppMode.TREE && wishes.length === 0 && !wishDialogOpen && (
+        <div
+          className="absolute pointer-events-none text-center"
+          style={{
+            zIndex: 20, left: '50%', top: '63%',
+            transform: 'translate(-50%, -50%)',
+            color: 'rgba(255,210,80,0.42)',
+            fontSize: '0.68rem', letterSpacing: '0.18em',
+            animation: 'wish-pulse 3.5s ease-in-out infinite',
+            textShadow: '0 0 8px rgba(255,180,0,0.3)',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          ✦ 点击树冠，许下心愿 ✦
+        </div>
+      )}
+
       {/* UI Overlay */}
       <div className="absolute inset-0 z-10 pointer-events-none">
         <UIOverlay
@@ -193,6 +240,12 @@ export default function App() {
           onShare={handleShare}
         />
       </div>
+
+      <WishDialog
+        open={wishDialogOpen}
+        onClose={() => setWishDialogOpen(false)}
+        onSubmit={handleWishSubmit}
+      />
 
       {toastMessage && (
         <div className="absolute top-4 right-4 z-50 bg-white/10 backdrop-blur-md border border-yellow-500/50 text-yellow-200 px-4 py-2 rounded-full shadow-[0_0_20px_rgba(255,215,0,0.3)] text-sm">
