@@ -12,7 +12,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Playfair+Display:ital@0;1&display=swap" rel="stylesheet">
     <style>
       html, body {
-        margin: 0; padding: 0; background: #0d0600;
+        margin: 0; padding: 0; background: #000;
         overflow: hidden; height: 100%; height: 100dvh;
         -webkit-tap-highlight-color: transparent;
         overscroll-behavior: none;
@@ -103,32 +103,12 @@
       }
       .abtn-gold:active { transform:scale(.93); }
 
-      /* ── 暖金棕色散景背景 ── */
+      /* ── 背景图片 ── */
       .warm-bg {
-        background-color: #0d0600;
-        background-image:
-          /* 顶部暖光（天花板灯光） */
-          radial-gradient(ellipse 160% 55% at 50% -8%,  rgba(185,105,18,0.42) 0%, transparent 100%),
-          /* 左侧墙壁暖光 */
-          radial-gradient(ellipse 48% 110% at -8%  50%, rgba(155, 82,12,0.28) 0%, transparent 100%),
-          /* 右侧墙壁暖光 */
-          radial-gradient(ellipse 48% 110% at 108% 50%, rgba(155, 82,12,0.28) 0%, transparent 100%),
-          /* 地面树根光晕 */
-          radial-gradient(ellipse 65% 22%  at 50% 102%, rgba(210,125,12,0.38) 0%, transparent 100%),
-          /* 散景光点 1 */
-          radial-gradient(circle 9% at 19% 19%, rgba(215,145,42,0.24) 0%, transparent 100%),
-          /* 散景光点 2 */
-          radial-gradient(circle 7% at 77% 17%, rgba(205,132,36,0.20) 0%, transparent 100%),
-          /* 散景光点 3 */
-          radial-gradient(circle 5% at 11% 54%, rgba(185,112,26,0.16) 0%, transparent 100%),
-          /* 散景光点 4 */
-          radial-gradient(circle 5% at 89% 47%, rgba(192,118,30,0.16) 0%, transparent 100%),
-          /* 散景光点 5 */
-          radial-gradient(circle 4% at 63%  9%, rgba(225,155,48,0.22) 0%, transparent 100%),
-          /* 散景光点 6 */
-          radial-gradient(circle 3% at 34% 13%, rgba(205,132,36,0.16) 0%, transparent 100%),
-          /* 中央深色区（让树更突出） */
-          radial-gradient(ellipse 55% 70% at 50% 45%, rgba(0,0,0,0.35) 0%, transparent 100%);
+        background-image: url('/bg.png');
+        background-size: cover;
+        background-position: center center;
+        background-repeat: no-repeat;
       }
 
       /* 动态浮动散景点（CSS 动画） */
