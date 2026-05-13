@@ -5,9 +5,10 @@ import { GestureState } from '../types';
 interface HandManagerProps {
   onHandUpdate: (state: GestureState) => void;
   isCameraOn: boolean;
+  isMobile?: boolean;
 }
 
-const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) => {
+const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn, isMobile = false }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const handLandmarkerRef = useRef<HandLandmarker | null>(null);
@@ -24,14 +25,21 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
         const vision = await FilesetResolver.forVisionTasks(
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
         );
-        handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
-            delegate: "GPU"
-          },
-          runningMode: "VIDEO",
-          numHands: 1
-        });
+        const tryCreate = async (delegate: "GPU" | "CPU") =>
+          HandLandmarker.createFromOptions(vision, {
+            baseOptions: {
+              modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+              delegate,
+            },
+            runningMode: "VIDEO",
+            numHands: 1,
+          });
+
+        try {
+          handLandmarkerRef.current = await tryCreate(isMobile ? "CPU" : "GPU");
+        } catch {
+          handLandmarkerRef.current = await tryCreate("CPU");
+        }
         setModelLoaded(true);
       } catch (e) {
         console.error("Error loading MediaPipe model:", e);
@@ -47,12 +55,10 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn }) =
       const startCamera = async () => {
         try {
           // Use standard resolution for faster startup
-          const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { 
-              width: 640,
-              height: 480,
-              frameRate: { ideal: 30 }
-            } 
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: isMobile
+              ? { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 360 } }
+              : { width: 640, height: 480, frameRate: { ideal: 30 } },
           });
           streamRef.current = stream;
           if (videoRef.current) {

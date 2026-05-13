@@ -151,8 +151,7 @@ const UIOverlay: React.FC<UIProps> = ({
       </div>
 
       {/* ── 左侧金色摄像头按钮 ── */}
-      {!isMobile && (
-        <div
+      <div
           className={`pointer-events-auto absolute left-4 z-30 cam-gold-btn ${isCameraOn ? 'cam-gold-on' : ''}`}
           style={{ top: '50%', transform: 'translateY(-50%)' }}
           onClick={onToggleCamera}
@@ -196,10 +195,9 @@ const UIOverlay: React.FC<UIProps> = ({
             {isCameraOn ? '关闭' : '开启手势'}
           </span>
         </div>
-      )}
 
-      {/* Gesture label when camera on (desktop) */}
-      {isCameraOn && !isMobile && (
+      {/* Gesture label when camera on */}
+      {isCameraOn && (
         <div className="absolute top-20 right-4 z-30 flex flex-col gap-1.5 text-xs">
           <div className="bg-black/55 backdrop-blur-md px-3 py-1.5 rounded border border-white/15 text-white/80">
             手势: <span className="text-yellow-400 font-bold">{currentGesture === 'Closed_Fist' ? '✊ 握拳' : currentGesture === 'Open_Palm' ? '🖐️ 张开' : '未检测'}</span>

@@ -178,8 +178,7 @@ export default function App() {
         )}
       </div>
 
-      {/* Desktop hand gesture manager */}
-      {!IS_MOBILE && <HandManager onHandUpdate={setHandState} isCameraOn={isCameraOn} />}
+      <HandManager onHandUpdate={setHandState} isCameraOn={isCameraOn} isMobile={IS_MOBILE} />
 
       {/* UI Overlay */}
       <div className="absolute inset-0 z-10 pointer-events-none">
