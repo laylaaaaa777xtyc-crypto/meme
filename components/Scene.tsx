@@ -1,9 +1,8 @@
-import React, { useRef, useMemo, Suspense, useEffect, useState } from 'react';
+import React, { useRef, useMemo, useEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { useTexture } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
-import { AppMode, GestureState, PhotoData } from '../types';
+import { AppMode, GestureState } from '../types';
 
 const IS_MOBILE = typeof navigator !== 'undefined'
   && (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
@@ -14,7 +13,6 @@ const IS_MOBILE = typeof navigator !== 'undefined'
 const particleVert = `
   precision highp float;
   uniform float uTime;
-  uniform float uExpand;
   uniform float uPixelRatio;
   uniform float uSizeScale;
   attribute vec3 aTargetPos;
@@ -30,19 +28,13 @@ const particleVert = `
 
   void main() {
     vColor = aColor;
-    vec3 pT = rotY(position,  uTime*0.15 - position.y*0.5);
+    vec3 pT = rotY(position, uTime*0.15 - position.y*0.5);
     pT.x *= 1.0 + 0.02*sin(uTime*2.0 + pT.y*2.0);
     pT.z *= 1.0 + 0.02*sin(uTime*2.0 + pT.y*2.0);
-
-    float d = length(aTargetPos.xz);
-    vec3 pC = rotY(aTargetPos, (uTime*0.1 + 8.0/(d+0.5) + d*0.1) * (aRandom > 0.5 ? 1.0 : 0.8));
-    pC.y += sin(d*0.8 - uTime*1.5)*0.5;
-
-    vec3 cur = mix(pT, pC, smoothstep(0.0,1.0,uExpand));
-    cur.y += sin(uTime*0.5 + aRandom*10.0)*0.05;
+    pT.y += sin(uTime*0.5 + aRandom*10.0)*0.05;
 
     float twinkle = sin(uTime*1.5 + aRandom*100.0);
-    vec4 mv = modelViewMatrix * vec4(cur, 1.0);
+    vec4 mv = modelViewMatrix * vec4(pT, 1.0);
     float ps = aSize * (0.9+0.2*twinkle) * uSizeScale * (600.0/-mv.z) * uPixelRatio;
     gl_PointSize = clamp(ps, 1.0, 48.0);
     gl_Position = projectionMatrix * mv;
@@ -62,7 +54,7 @@ const particleFrag = `
 `;
 
 const OrnamentSystem: React.FC<{ mode: AppMode }> = ({ mode }) => {
-  const ref  = useRef<THREE.Points>(null);
+  const ref   = useRef<THREE.Points>(null);
   const count = IS_MOBILE ? 2000 : 5000;
 
   const { positions, targetPositions, colors, sizes, randoms } = useMemo(() => {
@@ -72,49 +64,50 @@ const OrnamentSystem: React.FC<{ mode: AppMode }> = ({ mode }) => {
     const sz  = new Float32Array(count);
     const rnd = new Float32Array(count);
 
-    // Pure warm-gold palette (matches reference image)
-    const palette = [
-      new THREE.Color('#FFFFFF'),   // bright white sparkle
-      new THREE.Color('#FFFBE8'),   // cream white
-      new THREE.Color('#FFE89A'),   // pale gold
-      new THREE.Color('#FFD700'),   // gold
-      new THREE.Color('#FFC040'),   // amber gold
-      new THREE.Color('#F4A300'),   // deep amber
-      new THREE.Color('#FFE0A0'),   // warm highlight
+    // Base palette: warm gold; tint by mode
+    const basePalette = [
+      new THREE.Color('#FFFFFF'),
+      new THREE.Color('#FFFBE8'),
+      new THREE.Color('#FFE89A'),
+      new THREE.Color('#FFD700'),
+      new THREE.Color('#FFC040'),
+      new THREE.Color('#F4A300'),
+      new THREE.Color('#FFE0A0'),
     ];
 
     for (let i = 0; i < count; i++) {
-      // Tree shape
-      const h = Math.random() * 14 - 7;
+      const h  = Math.random() * 14 - 7;
       const hN = (h + 7) / 14;
       const rMax = (1.0 - hN) * 6.5;
       let rr = Math.sqrt(Math.random());
       if (Math.random() > 0.5) rr = 0.4 + 0.6 * rr;
-      const r = rr * rMax;
+      const r     = rr * rMax;
       const theta = h * 4.0 + Math.random() * Math.PI * 2;
-      pos[i*3] = Math.cos(theta)*r; pos[i*3+1] = h; pos[i*3+2] = Math.sin(theta)*r;
+      pos[i*3]   = Math.cos(theta) * r;
+      pos[i*3+1] = h;
+      pos[i*3+2] = Math.sin(theta) * r;
+      tgt[i*3]   = pos[i*3];
+      tgt[i*3+1] = pos[i*3+1];
+      tgt[i*3+2] = pos[i*3+2];
 
-      // Cloud shape
-      if (Math.random() > 0.3) {
-        const rc = 4 + Math.pow(Math.random(), 2) * 18;
-        const tc = Math.random() * Math.PI * 2;
-        tgt[i*3] = rc*Math.cos(tc); tgt[i*3+1] = (Math.random()-.5)*3; tgt[i*3+2] = rc*Math.sin(tc);
-      } else {
-        const rc = 14 + Math.random()*10, tc = Math.random()*Math.PI*2, phi = Math.acos(2*Math.random()-1);
-        tgt[i*3] = rc*Math.sin(phi)*Math.cos(tc); tgt[i*3+1] = rc*Math.sin(phi)*Math.sin(tc); tgt[i*3+2] = rc*Math.cos(phi);
-      }
-
-      const c = palette[Math.floor(Math.random() * palette.length)];
-      col[i*3] = c.r; col[i*3+1] = c.g; col[i*3+2] = c.b;
+      const c = basePalette[Math.floor(Math.random() * basePalette.length)];
+      col[i*3]   = c.r; col[i*3+1] = c.g; col[i*3+2] = c.b;
       sz[i]  = Math.random() < 0.7 ? Math.random()*0.8+0.6 : Math.random()*1.5+1.5;
       rnd[i] = Math.random();
     }
     return { positions: pos, targetPositions: tgt, colors: col, sizes: sz, randoms: rnd };
   }, [count]);
 
+  // Tint overlay per mode
+  const modeColor = useMemo(() => {
+    if (mode === AppMode.LOVE)   return new THREE.Color('#FF6B9D');
+    if (mode === AppMode.CAREER) return new THREE.Color('#FFD700');
+    if (mode === AppMode.HEALTH) return new THREE.Color('#4ADE80');
+    return null;
+  }, [mode]);
+
   const uniforms = useMemo(() => ({
     uTime:       { value: 0 },
-    uExpand:     { value: 0 },
     uPixelRatio: { value: Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, IS_MOBILE ? 1.5 : 2) },
     uSizeScale:  { value: IS_MOBILE ? 1.4 : 1.0 },
   }), []);
@@ -122,7 +115,18 @@ const OrnamentSystem: React.FC<{ mode: AppMode }> = ({ mode }) => {
   useFrame((state, delta) => {
     if (!ref.current) return;
     uniforms.uTime.value = state.clock.elapsedTime;
-    uniforms.uExpand.value = THREE.MathUtils.lerp(uniforms.uExpand.value, mode === AppMode.TREE ? 0 : 1, delta * 2);
+
+    // Gently tint particle colors toward mode color
+    if (modeColor && ref.current.geometry.attributes.aColor) {
+      const arr = ref.current.geometry.attributes.aColor.array as Float32Array;
+      const t   = Math.min(delta * 1.5, 1);
+      for (let i = 0; i < arr.length; i += 3) {
+        arr[i]   += (modeColor.r - arr[i])   * t * 0.05;
+        arr[i+1] += (modeColor.g - arr[i+1]) * t * 0.05;
+        arr[i+2] += (modeColor.b - arr[i+2]) * t * 0.05;
+      }
+      ref.current.geometry.attributes.aColor.needsUpdate = true;
+    }
   });
 
   return (
@@ -151,23 +155,14 @@ const strandVert = `
   attribute vec3 aColor;
   varying float vBright;
   varying vec3  vColor;
-
   void main() {
     vColor = aColor;
-
-    /* Each bulb twinkles at its own phase */
     float t = sin(uTime * 2.4 + aPhase);
     vBright = 0.30 + 0.70 * (t * 0.5 + 0.5);
-
-    /* The whole strand slowly co-rotates with the tree */
     float rot = uTime * 0.13;
     float s = sin(rot), c = cos(rot);
-    vec3 p = vec3(position.x*c + position.z*s,
-                  position.y,
-                 -position.x*s + position.z*c);
-
+    vec3 p = vec3(position.x*c + position.z*s, position.y, -position.x*s + position.z*c);
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
-    /* Bulbs are noticeably larger than background particles */
     float ps = clamp(280.0 / -mv.z * (0.6 + 0.5*vBright), 2.0, 18.0);
     gl_PointSize = ps;
     gl_Position  = projectionMatrix * mv;
@@ -178,17 +173,13 @@ const strandFrag = `
   precision mediump float;
   varying float vBright;
   varying vec3  vColor;
-
   void main() {
     vec2  c = gl_PointCoord - 0.5;
     float d = length(c);
     if (d > 0.5) discard;
-
-    /* Bright core + soft halo */
-    float core = pow(max(0.0, 1.0 - d * 3.5), 1.8);   /* tight bright centre */
-    float halo = pow(max(0.0, 1.0 - d * 2.0), 2.4);   /* wider soft glow     */
+    float core = pow(max(0.0, 1.0 - d * 3.5), 1.8);
+    float halo = pow(max(0.0, 1.0 - d * 2.0), 2.4);
     float glow = clamp(core + halo * 0.55, 0.0, 1.0);
-
     gl_FragColor = vec4(vColor * 1.5, glow * vBright);
   }
 `;
@@ -201,35 +192,22 @@ const LightStrand: React.FC = () => {
     const pos = new Float32Array(count * 3);
     const ph  = new Float32Array(count);
     const col = new Float32Array(count * 3);
-
-    /* Weighted bulb colour palette – classic Christmas */
-    const bulbs: Array<{ hex: string; w: number }> = [
-      { hex: '#FFFFFF', w: 0.30 },  // bright white
-      { hex: '#FFE89A', w: 0.28 },  // warm gold
-      { hex: '#FFD700', w: 0.12 },  // pure gold
-      { hex: '#FF4444', w: 0.15 },  // red
-      { hex: '#44DD55', w: 0.10 },  // green
-      { hex: '#66AAFF', w: 0.05 },  // cool blue accent
+    const bulbs = [
+      { hex: '#FFFFFF', w: 0.30 }, { hex: '#FFE89A', w: 0.28 },
+      { hex: '#FFD700', w: 0.12 }, { hex: '#FF4444', w: 0.15 },
+      { hex: '#44DD55', w: 0.10 }, { hex: '#66AAFF', w: 0.05 },
     ];
-
     for (let i = 0; i < count; i++) {
-      const t    = i / count;                          // 0 → 1  (bottom to top)
-      const h    = t * 15.0 - 7.5;                    // full tree height
+      const t    = i / count;
+      const h    = t * 15.0 - 7.5;
       const hN   = Math.max(0, Math.min(1, (h + 7) / 14));
-      const treeR = (1.0 - hN) * 6.5;
-      /* Sit slightly inside the outer edge of the particle tree */
-      const r    = Math.max(0.1, treeR * 0.80);
-      const angle = t * Math.PI * 2 * 10;             // 10 spiral turns
-
+      const r    = Math.max(0.1, (1.0 - hN) * 6.5 * 0.80);
+      const angle = t * Math.PI * 2 * 10;
       pos[i*3]   = Math.cos(angle) * r;
       pos[i*3+1] = h;
       pos[i*3+2] = Math.sin(angle) * r;
-
       ph[i] = Math.random() * Math.PI * 2;
-
-      /* Pick colour from weighted list */
-      const roll = Math.random();
-      let acc = 0, chosen = '#FFFFFF';
+      const roll = Math.random(); let acc = 0, chosen = '#FFFFFF';
       for (const { hex, w } of bulbs) { acc += w; if (roll < acc) { chosen = hex; break; } }
       const c = new THREE.Color(chosen);
       col[i*3] = c.r; col[i*3+1] = c.g; col[i*3+2] = c.b;
@@ -238,7 +216,6 @@ const LightStrand: React.FC = () => {
   }, [count]);
 
   const uniforms = useMemo(() => ({ uTime: { value: 0 } }), []);
-
   useFrame(state => { uniforms.uTime.value = state.clock.elapsedTime; });
 
   return (
@@ -250,76 +227,17 @@ const LightStrand: React.FC = () => {
       </bufferGeometry>
       <shaderMaterial
         vertexShader={strandVert} fragmentShader={strandFrag}
-        uniforms={uniforms} transparent depthWrite={false}
-        blending={THREE.AdditiveBlending}
+        uniforms={uniforms} transparent depthWrite={false} blending={THREE.AdditiveBlending}
       />
     </points>
   );
 };
 
-// ─── Photo plane (3D, used in CLOUD / ZOOM modes) ─────────────────────────────
-
-interface PhotoPlaneProps { data: PhotoData; index: number; mode: AppMode; activeIndex: number | null; }
-
-const PhotoPlane: React.FC<PhotoPlaneProps> = ({ data, index, mode, activeIndex }) => {
-  const texture   = useTexture(data.url);
-  const groupRef  = useRef<THREE.Group>(null);
-
-  const cloudPos = useMemo(() => {
-    const r = 8 + Math.random()*5, t = Math.random()*Math.PI*2, phi = Math.acos(2*Math.random()-1);
-    return new THREE.Vector3(r*Math.sin(phi)*Math.cos(t), r*Math.sin(phi)*Math.sin(t), r*Math.cos(phi));
-  }, []);
-
-  const treePos = useMemo(() => {
-    const y = (Math.random()-.5)*8, r = (5-y)*0.35+0.5, a = y*5+index;
-    return new THREE.Vector3(Math.cos(a)*r, y, Math.sin(a)*r);
-  }, [index]);
-
-  const tmpP = useMemo(() => new THREE.Vector3(), []);
-  const tmpS = useMemo(() => new THREE.Vector3(), []);
-
-  useFrame((state, delta) => {
-    const g = groupRef.current; if (!g) return;
-    if (mode === AppMode.TREE) {
-      tmpP.copy(treePos); tmpS.set(0, 0, 1); // hidden in TREE (HTML polaroids shown instead)
-    } else if (mode === AppMode.CLOUD) {
-      tmpP.copy(cloudPos); tmpS.set(1.8, 1.8, 1);
-      g.lookAt(0, 0, 15);
-    } else if (mode === AppMode.ZOOM) {
-      if (index === activeIndex) { tmpP.set(0, 0, 16); tmpS.set(5, 5, 1); g.rotation.set(0,0,0); }
-      else { tmpP.copy(cloudPos).multiplyScalar(3); tmpS.set(0,0,1); }
-    }
-    g.position.lerp(tmpP, delta*3);
-    g.scale.lerp(tmpS, delta*3);
-    if (mode === AppMode.CLOUD) { g.rotation.z += delta*0.04; }
-  });
-
-  return (
-    <group ref={groupRef}>
-      {/* White polaroid background */}
-      <mesh position={[0, 0, -0.01]}>
-        <planeGeometry args={[1.15, 1.4]} />
-        <meshBasicMaterial color="#F5F0E8" />
-      </mesh>
-      {/* Photo */}
-      <mesh position={[0, 0.13, 0]}>
-        <planeGeometry args={[1.0, 1.0]} />
-        <meshBasicMaterial map={texture} side={THREE.DoubleSide} transparent />
-      </mesh>
-    </group>
-  );
-};
-
-const PhotoGroup: React.FC<{ photos: PhotoData[]; mode: AppMode; activeIndex: number | null }> =
-  ({ photos, mode, activeIndex }) => (
-    <>{photos.map((p, i) => <PhotoPlane key={p.id} data={p} index={i} mode={mode} activeIndex={activeIndex} />)}</>
-  );
-
 // ─── Scene root ───────────────────────────────────────────────────────────────
 
-interface SceneProps { mode: AppMode; handState: GestureState; photos: PhotoData[]; activePhotoIndex: number | null; }
+interface SceneProps { mode: AppMode; handState: GestureState; }
 
-const Scene: React.FC<SceneProps> = ({ mode, handState, photos, activePhotoIndex }) => {
+const Scene: React.FC<SceneProps> = ({ mode, handState }) => {
   const groupRef = useRef<THREE.Group>(null);
   const { viewport, camera, size } = useThree();
   const [postOk] = useState(!IS_MOBILE);
@@ -327,16 +245,20 @@ const Scene: React.FC<SceneProps> = ({ mode, handState, photos, activePhotoIndex
   useEffect(() => {
     const p = camera as THREE.PerspectiveCamera;
     const aspect = size.width / size.height;
-    p.position.z = aspect < 1 ? 26 + (1-aspect)*18 : 26;
+    p.position.z = aspect < 1 ? 26 + (1 - aspect) * 18 : 26;
     p.updateProjectionMatrix();
   }, [size.width, size.height, camera]);
 
   const scale = viewport.width < 5 ? 0.75 : viewport.width < 8 ? 0.9 : 1.0;
 
   useFrame(() => {
-    if (!groupRef.current || mode === AppMode.ZOOM) return;
-    groupRef.current.rotation.y = THREE.MathUtils.lerp(groupRef.current.rotation.y, (handState.handPosition.x-.5)*1.5, 0.05);
-    groupRef.current.rotation.x = THREE.MathUtils.lerp(groupRef.current.rotation.x, (handState.handPosition.y-.5)*0.5, 0.05);
+    if (!groupRef.current) return;
+    groupRef.current.rotation.y = THREE.MathUtils.lerp(
+      groupRef.current.rotation.y, (handState.handPosition.x - 0.5) * 1.5, 0.05
+    );
+    groupRef.current.rotation.x = THREE.MathUtils.lerp(
+      groupRef.current.rotation.x, (handState.handPosition.y - 0.5) * 0.5, 0.05
+    );
   });
 
   return (
@@ -347,13 +269,7 @@ const Scene: React.FC<SceneProps> = ({ mode, handState, photos, activePhotoIndex
       <group ref={groupRef} scale={[scale, scale, scale]}>
         <OrnamentSystem mode={mode} />
         <LightStrand />
-
-        <Suspense fallback={null}>
-          <PhotoGroup photos={photos} mode={mode} activeIndex={activePhotoIndex} />
-        </Suspense>
-
-        {/* Star topper */}
-        <mesh position={[0, 7.5, 0]} visible={mode === AppMode.TREE}>
+        <mesh position={[0, 7.5, 0]}>
           <octahedronGeometry args={[0.55]} />
           <meshBasicMaterial color="#FFFFF0" toneMapped={false} />
           <pointLight intensity={0.7} distance={14} color="#FFE060" decay={2} />

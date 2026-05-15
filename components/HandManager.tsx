@@ -4,57 +4,58 @@ import { GestureState } from '../types';
 
 interface HandManagerProps {
   onHandUpdate: (state: GestureState) => void;
+  onGestureTrigger: (gesture: GestureState['gesture']) => void;
   isCameraOn: boolean;
   isMobile?: boolean;
 }
 
-const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn, isMobile = false }) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
+const TRIGGER_HOLD_MS = 1200; // 手势稳定 1.2s 才触发
+
+const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, onGestureTrigger, isCameraOn, isMobile = false }) => {
+  const videoRef  = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const handLandmarkerRef = useRef<HandLandmarker | null>(null);
-  const requestRef = useRef<number | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const lastPredictionTime = useRef<number>(0);
+  const handLandmarkerRef     = useRef<HandLandmarker | null>(null);
+  const requestRef            = useRef<number | null>(null);
+  const streamRef             = useRef<MediaStream | null>(null);
+  const lastPredictionTime    = useRef<number>(0);
+  const gestureHoldStart      = useRef<number>(0);
+  const lastStableGesture     = useRef<GestureState['gesture']>('Unknown');
+  const triggeredGestures     = useRef<Set<GestureState['gesture']>>(new Set());
   const [modelLoaded, setModelLoaded] = useState(false);
 
-  // Initialize MediaPipe lazily — only when camera is first turned on
   useEffect(() => {
     if (!isCameraOn || handLandmarkerRef.current) return;
     const init = async () => {
       try {
         const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm'
         );
-        const tryCreate = async (delegate: "GPU" | "CPU") =>
+        const tryCreate = async (delegate: 'GPU' | 'CPU') =>
           HandLandmarker.createFromOptions(vision, {
             baseOptions: {
-              modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+              modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
               delegate,
             },
-            runningMode: "VIDEO",
+            runningMode: 'VIDEO',
             numHands: 1,
           });
-
         try {
-          handLandmarkerRef.current = await tryCreate(isMobile ? "CPU" : "GPU");
+          handLandmarkerRef.current = await tryCreate(isMobile ? 'CPU' : 'GPU');
         } catch {
-          handLandmarkerRef.current = await tryCreate("CPU");
+          handLandmarkerRef.current = await tryCreate('CPU');
         }
         setModelLoaded(true);
       } catch (e) {
-        console.error("Error loading MediaPipe model:", e);
+        console.error('HandLandmarker init error:', e);
       }
     };
     init();
-  }, [isCameraOn]);
+  }, [isCameraOn, isMobile]);
 
-  // Manage Camera Stream based on isCameraOn
-  // IMPROVED: Do NOT wait for modelLoaded here. Open camera immediately when user requests.
   useEffect(() => {
     if (isCameraOn) {
       const startCamera = async () => {
         try {
-          // Use standard resolution for faster startup
           const stream = await navigator.mediaDevices.getUserMedia({
             video: isMobile
               ? { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 360 } }
@@ -63,141 +64,95 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn, isM
           streamRef.current = stream;
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
-            // The 'loadeddata' event will trigger the prediction loop
-            // The prediction loop will simply do nothing until the model is ready
             videoRef.current.addEventListener('loadeddata', predictWebcam);
           }
         } catch (err) {
-          console.error("Camera error:", err);
+          console.error('Camera error:', err);
         }
       };
       startCamera();
     } else {
-      // Cleanup logic
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-        streamRef.current = null;
-      }
+      streamRef.current?.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
       if (videoRef.current) {
         videoRef.current.srcObject = null;
         videoRef.current.removeEventListener('loadeddata', predictWebcam);
       }
-      if (requestRef.current) {
-        cancelAnimationFrame(requestRef.current);
-        requestRef.current = null;
-      }
-      
-      // Reset state
-      onHandUpdate({
-         gesture: 'Unknown',
-         isPinching: false,
-         handPosition: { x: 0.5, y: 0.5 }
-      });
-      
-      // Clear canvas
-      const canvasCtx = canvasRef.current?.getContext('2d');
-      if (canvasCtx && canvasRef.current) {
-         canvasCtx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-      }
+      if (requestRef.current) { cancelAnimationFrame(requestRef.current); requestRef.current = null; }
+      lastStableGesture.current = 'Unknown';
+      triggeredGestures.current.clear();
+      onHandUpdate({ gesture: 'Unknown', handPosition: { x: 0.5, y: 0.5 } });
+      const ctx = canvasRef.current?.getContext('2d');
+      if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     }
-
     return () => {
-      // Cleanup on unmount
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-      if (requestRef.current) {
-        cancelAnimationFrame(requestRef.current);
-      }
+      streamRef.current?.getTracks().forEach(t => t.stop());
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
-  }, [isCameraOn]); // Dependency is ONLY isCameraOn, not modelLoaded
+  }, [isCameraOn]);
 
-  // Prediction Loop
   const predictWebcam = () => {
-    if (!isCameraOn) return; 
+    if (!isCameraOn) return;
     if (!videoRef.current || !canvasRef.current) return;
-    
-    // If model isn't loaded yet, keep looping but don't process. 
-    // This allows the camera to be visible while the "brain" loads.
-    if (!handLandmarkerRef.current) {
-      requestRef.current = requestAnimationFrame(predictWebcam);
-      return;
-    }
-
-    // Ensure video is playing and has data
-    if (videoRef.current.readyState < 2) {
-       requestRef.current = requestAnimationFrame(predictWebcam);
-       return;
-    }
+    if (!handLandmarkerRef.current) { requestRef.current = requestAnimationFrame(predictWebcam); return; }
+    if (videoRef.current.readyState < 2) { requestRef.current = requestAnimationFrame(predictWebcam); return; }
 
     const now = performance.now();
-    if (now - lastPredictionTime.current < 40) { // Approx 25fps cap for performance
-        requestRef.current = requestAnimationFrame(predictWebcam);
-        return;
-    }
+    if (now - lastPredictionTime.current < 40) { requestRef.current = requestAnimationFrame(predictWebcam); return; }
     lastPredictionTime.current = now;
 
-    const startTimeMs = performance.now();
-    const results = handLandmarkerRef.current.detectForVideo(videoRef.current, startTimeMs);
-    
-    const canvasCtx = canvasRef.current.getContext('2d');
-    if (canvasCtx) {
-      canvasCtx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-       if (results.landmarks) {
-        const drawingUtils = new DrawingUtils(canvasCtx);
-        for (const landmarks of results.landmarks) {
-          drawingUtils.drawConnectors(landmarks, HandLandmarker.HAND_CONNECTIONS, { color: "#00FF00", lineWidth: 2 });
-          drawingUtils.drawLandmarks(landmarks, { color: "#FF0000", lineWidth: 1 });
+    const results = handLandmarkerRef.current.detectForVideo(videoRef.current, now);
+
+    const ctx = canvasRef.current.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      if (results.landmarks) {
+        const du = new DrawingUtils(ctx);
+        for (const lm of results.landmarks) {
+          du.drawConnectors(lm, HandLandmarker.HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
+          du.drawLandmarks(lm, { color: '#FF0000', lineWidth: 1 });
         }
       }
     }
 
-    // Logic to determine gestures
-    if (results.landmarks && results.landmarks.length > 0) {
-      const landmarks = results.landmarks[0];
-      const wrist = landmarks[0];
-      const middleKnuckle = landmarks[9];
-      const handX = 1 - ((wrist.x + middleKnuckle.x) / 2); // Mirror X
-      const handY = (wrist.y + middleKnuckle.y) / 2;
+    let gesture: GestureState['gesture'] = 'Unknown';
+    let handPos = { x: 0.5, y: 0.5 };
 
-      // Finger Extension Logic
-      const isFingerExtended = (tipIdx: number, pipIdx: number) => {
-         const dTip = Math.hypot(landmarks[tipIdx].x - wrist.x, landmarks[tipIdx].y - wrist.y);
-         const dPip = Math.hypot(landmarks[pipIdx].x - wrist.x, landmarks[pipIdx].y - wrist.y);
-         return dTip > (dPip * 1.15); 
+    if (results.landmarks?.length) {
+      const lm = results.landmarks[0];
+      const wrist = lm[0];
+      const mid9  = lm[9];
+      handPos = { x: 1 - (wrist.x + mid9.x) / 2, y: (wrist.y + mid9.y) / 2 };
+
+      const ext = (tip: number, pip: number) => {
+        const dTip = Math.hypot(lm[tip].x - wrist.x, lm[tip].y - wrist.y);
+        const dPip = Math.hypot(lm[pip].x - wrist.x, lm[pip].y - wrist.y);
+        return dTip > dPip * 1.15;
       };
 
-      const indexOpen = isFingerExtended(8, 6);
-      const middleOpen = isFingerExtended(12, 10);
-      const ringOpen = isFingerExtended(16, 14);
-      const pinkyOpen = isFingerExtended(20, 18);
+      const idx    = ext(8, 6);
+      const mid    = ext(12, 10);
+      const ring   = ext(16, 14);
+      const pinky  = ext(20, 18);
+      const count  = [idx, mid, ring, pinky].filter(Boolean).length;
 
-      const fingersOpenCount = [indexOpen, middleOpen, ringOpen, pinkyOpen].filter(Boolean).length;
-      
-      // Pinch Detection
-      const dPinch = Math.hypot(landmarks[8].x - landmarks[4].x, landmarks[8].y - landmarks[4].y);
-      const isPinching = dPinch < 0.06;
+      if (count === 0) gesture = 'Closed_Fist';
+      else if (count >= 3) gesture = 'Open_Palm';
+      else if (idx && !mid && !ring && !pinky) gesture = 'Pointing_Up';
+    }
 
-      let gesture: GestureState['gesture'] = 'Unknown';
-      
-      if (isPinching) {
-        gesture = 'Unknown';
-      } 
-      else if (fingersOpenCount === 0 && !indexOpen && !isPinching) {
-        gesture = 'Closed_Fist';
+    onHandUpdate({ gesture, handPosition: handPos });
+
+    // 手势锁定计时：稳定 1.2s 触发一次
+    if (gesture !== 'Unknown' && gesture === lastStableGesture.current) {
+      if (!triggeredGestures.current.has(gesture) && now - gestureHoldStart.current >= TRIGGER_HOLD_MS) {
+        triggeredGestures.current.add(gesture);
+        onGestureTrigger(gesture);
       }
-      else if (fingersOpenCount >= 3) {
-        gesture = 'Open_Palm';
-      }
-      else if (indexOpen && !middleOpen && !ringOpen && !pinkyOpen) {
-        gesture = 'Pointing_Up';
-      }
-      
-      onHandUpdate({
-        gesture,
-        isPinching,
-        handPosition: { x: handX, y: handY }
-      });
+    } else {
+      lastStableGesture.current = gesture;
+      gestureHoldStart.current  = now;
+      triggeredGestures.current.clear();
     }
 
     requestRef.current = requestAnimationFrame(predictWebcam);
@@ -205,13 +160,10 @@ const HandManager: React.FC<HandManagerProps> = ({ onHandUpdate, isCameraOn, isM
 
   return (
     <div className={`absolute top-4 right-4 w-32 h-24 border border-white/20 rounded-lg overflow-hidden transition-opacity z-50 ${isCameraOn ? 'opacity-50 hover:opacity-100' : 'opacity-0 pointer-events-none'}`}>
-      <video ref={videoRef} className="w-full h-full object-cover transform -scale-x-100" autoPlay playsInline muted />
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full transform -scale-x-100" width={128} height={96} />
-      {/* Loading Indicator for Model */}
+      <video ref={videoRef} className="w-full h-full object-cover -scale-x-100" autoPlay playsInline muted />
+      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full -scale-x-100" width={128} height={96} />
       {isCameraOn && !modelLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-[10px] text-white">
-          AI Loading...
-        </div>
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-[10px] text-white">AI 加载中…</div>
       )}
     </div>
   );

@@ -1,180 +1,133 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Loader } from '@react-three/drei';
 import Scene from './components/Scene';
 import UIOverlay from './components/UIOverlay';
 import HandManager from './components/HandManager';
+import FortuneCard from './components/FortuneCard';
+import WishDrift, { pickRandom } from './components/WishDrift';
+import GestureEffect from './components/GestureEffect';
 import WishDialog from './components/WishDialog';
-import WishOrbLayer from './components/WishOrbLayer';
-import { AppMode, PhotoData, GestureState, WishOrb } from './types';
+import { AppMode, ApiWish, FortuneCard as FortuneCardType, GestureState } from './types';
+import { getRandomFortune } from './utils/fortuneData';
 
 const IS_MOBILE = typeof navigator !== 'undefined'
   && (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
     || (typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches));
 
-const DEFAULT_PHOTOS: PhotoData[] = Array.from({ length: 8 }).map((_, i) => ({
-  id: `def-${i}`,
-  url: `https://picsum.photos/500/500?random=${i + 10}`,
-  aspectRatio: 1,
-}));
+const GESTURE_TO_MODE: Record<string, AppMode> = {
+  Open_Palm:   AppMode.LOVE,
+  Pointing_Up: AppMode.CAREER,
+  Closed_Fist: AppMode.HEALTH,
+};
+
+const GESTURE_TO_TYPE: Record<string, FortuneCardType['type']> = {
+  Open_Palm:   'love',
+  Pointing_Up: 'career',
+  Closed_Fist: 'health',
+};
 
 export default function App() {
-  const [mode, setMode]                     = useState<AppMode>(AppMode.TREE);
-  const [photos, setPhotos]                 = useState<PhotoData[]>(DEFAULT_PHOTOS);
-  const [activePhotoIndex, setActivePhotoIndex] = useState<number | null>(null);
-  const [isCameraOn, setIsCameraOn]         = useState(false);
-  const [toastMessage, setToastMessage]     = useState<string | null>(null);
-  const [glLost, setGlLost]                 = useState(false);
-  const [wishes, setWishes]                 = useState<WishOrb[]>([]);
+  const [mode, setMode]               = useState<AppMode>(AppMode.TREE);
+  const [fortuneCard, setFortuneCard] = useState<FortuneCardType | null>(null);
+  const [isCameraOn, setIsCameraOn]   = useState(false);
+  const [toastMessage, setToastMsg]   = useState<string | null>(null);
+  const [glLost, setGlLost]           = useState(false);
   const [wishDialogOpen, setWishDialogOpen] = useState(false);
-  const [wishTapPos, setWishTapPos]         = useState({ x: 0.5, y: 0.5 });
-  const sceneContainerRef                   = useRef<HTMLDivElement>(null);
-  const wishDialogOpenRef                   = useRef(false);
-
-  const [handState, setHandState] = useState<GestureState>({
+  const [handState, setHandState]     = useState<GestureState>({
     gesture: 'Unknown',
-    isPinching: false,
     handPosition: { x: 0.5, y: 0.5 },
   });
 
+  // WishDrift 的 launch 函数由子组件通过 onShake prop 注册
+  const wishLaunchRef = useRef<((wishes: ApiWish[]) => void) | null>(null);
+  const wishPoolRef   = useRef<ApiWish[]>([]);
+
   const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3000);
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files) return;
-    const next: PhotoData[] = Array.from(e.target.files).map(f => ({
-      id: f.name,
-      url: URL.createObjectURL(f),
-      aspectRatio: 1,
-    }));
-    if (next.length) { setPhotos(p => [...p, ...next]); showToast('照片上传成功！'); }
+  // 手势稳定 1.2s 后触发运势
+  const handleGestureTrigger = useCallback((gesture: GestureState['gesture']) => {
+    const newMode = GESTURE_TO_MODE[gesture];
+    if (!newMode || fortuneCard) return;
+    setMode(newMode);
+    setTimeout(() => {
+      const type = GESTURE_TO_TYPE[gesture];
+      setFortuneCard({ type, text: getRandomFortune(type) });
+    }, 900);
+  }, [fortuneCard]);
+
+  const handleCloseCard = () => {
+    setFortuneCard(null);
+    setMode(AppMode.TREE);
+  };
+
+  const toggleCamera = () => {
+    setIsCameraOn(prev => {
+      if (!prev) showToast('摄像头开启中…');
+      else { showToast('摄像头已关闭'); setMode(AppMode.TREE); }
+      return !prev;
+    });
+  };
+
+  // 摇一摇树
+  const handleShakeTree = () => {
+    const pool = wishPoolRef.current;
+    if (!pool.length) { showToast('还没有愿望哦，去挂一个吧～'); return; }
+    const picks = pickRandom(pool, 3);
+    wishLaunchRef.current?.(picks);
+    showToast('✨ 他人的愿望飘来了～');
+  };
+
+  // WishDrift 注册 launch 函数
+  const handleWishDriftReady = useCallback((launch: (wishes: ApiWish[]) => void) => {
+    wishLaunchRef.current = launch;
+  }, []);
+
+  // 提交新愿望
+  const handleWishSubmit = async (wish: string) => {
+    setWishDialogOpen(false);
+    try {
+      const res = await fetch('/api/wishes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: wish }),
+      });
+      if (res.ok) {
+        const created: ApiWish = await res.json();
+        wishPoolRef.current = [created, ...wishPoolRef.current];
+        showToast('愿望已挂上树枝 ✦');
+      } else {
+        showToast('愿望提交失败，稍后再试');
+      }
+    } catch {
+      showToast('网络错误，愿望暂存本地');
+    }
   };
 
   const handleShare = () => {
+    const text = '我正在「愿树·漂流」许愿，快来看看你的运势！';
     if (navigator.share) {
-      navigator.share({ title: '光语许愿树', text: '点亮每一刻，珍藏每一份美好' }).catch(() => {});
+      navigator.share({ title: '愿树·漂流', text }).catch(() => {});
     } else {
       showToast('分享功能暂不支持此浏览器');
     }
   };
 
-  const toggleCamera = () => {
-    const next = !isCameraOn;
-    setIsCameraOn(next);
-    if (next) showToast('摄像头正在开启...');
-    else { showToast('摄像头已关闭'); setMode(AppMode.TREE); setActivePhotoIndex(null); }
-  };
-
-  useEffect(() => { wishDialogOpenRef.current = wishDialogOpen; }, [wishDialogOpen]);
-
-  const handleWishSubmit = (wish: string, lightMessage: string) => {
-    setWishDialogOpen(false);
-    setWishes(prev => {
-      const orb: WishOrb = { id: `wish-${Date.now()}`, x: wishTapPos.x, y: wishTapPos.y, wish, lightMessage };
-      const next = [...prev, orb];
-      return next.length > 30 ? next.slice(next.length - 30) : next;
-    });
-  };
-
-  // Camera gesture → mode
-  useEffect(() => {
-    if (!isCameraOn) return;
-    if (handState.gesture === 'Closed_Fist') { setMode(AppMode.TREE); setActivePhotoIndex(null); }
-    else if (handState.gesture === 'Open_Palm' && mode !== AppMode.CLOUD) {
-      setMode(AppMode.CLOUD); setActivePhotoIndex(null);
-    }
-    if (handState.isPinching && mode === AppMode.CLOUD) {
-      setMode(AppMode.ZOOM);
-      setActivePhotoIndex(p => p === null ? Math.floor(Math.random() * photos.length) : p);
-    }
-  }, [handState.gesture, handState.isPinching, mode, photos.length, isCameraOn]);
-
-  // Touch / mouse → rotate + tap
-  useEffect(() => {
-    const el = sceneContainerRef.current;
-    if (!el) return;
-    let dragging = false, startX = 0, startY = 0, moved = false, startTime = 0, lastTap = 0;
-
-    const onStart = (cx: number, cy: number) => {
-      dragging = true; moved = false; startX = cx; startY = cy; startTime = performance.now();
-    };
-    const onMove = (cx: number, cy: number) => {
-      if (!dragging) return;
-      if (Math.abs(cx - startX) > 6 || Math.abs(cy - startY) > 6) moved = true;
-      if (!isCameraOn) {
-        setHandState({ gesture: 'Unknown', isPinching: false,
-          handPosition: { x: cx / window.innerWidth, y: cy / window.innerHeight } });
-      }
-    };
-    const onEnd = () => {
-      if (!dragging) return; dragging = false;
-      if (!moved && performance.now() - startTime < 350) {
-        const now = performance.now();
-        const dbl = now - lastTap < 320; lastTap = now;
-        if (dbl) {
-          setMode(prev => {
-            if (prev === AppMode.ZOOM) return AppMode.CLOUD;
-            setActivePhotoIndex(Math.floor(Math.random() * Math.max(photos.length, 1)));
-            return AppMode.ZOOM;
-          });
-        } else {
-          setMode(prev => {
-            if (prev === AppMode.ZOOM) { setActivePhotoIndex(null); return AppMode.CLOUD; }
-            if (prev === AppMode.TREE) {
-              if (!wishDialogOpenRef.current) {
-                setWishTapPos({ x: startX / window.innerWidth, y: startY / window.innerHeight });
-                setWishDialogOpen(true);
-              }
-              return prev;
-            }
-            return AppMode.TREE;
-          });
-          setActivePhotoIndex(null);
-        }
-      }
-    };
-
-    const ts = (e: TouchEvent) => { const t = e.touches[0]; if (t) onStart(t.clientX, t.clientY); };
-    const tm = (e: TouchEvent) => { const t = e.touches[0]; if (t) onMove(t.clientX, t.clientY); };
-    const ms = (e: MouseEvent) => onStart(e.clientX, e.clientY);
-    const mm = (e: MouseEvent) => onMove(e.clientX, e.clientY);
-
-    el.addEventListener('touchstart', ts,   { passive: true });
-    el.addEventListener('touchmove',  tm,   { passive: true });
-    el.addEventListener('touchend',   onEnd);
-    el.addEventListener('mousedown',  ms);
-    window.addEventListener('mousemove', mm);
-    window.addEventListener('mouseup',   onEnd);
-    return () => {
-      el.removeEventListener('touchstart', ts);
-      el.removeEventListener('touchmove',  tm);
-      el.removeEventListener('touchend',   onEnd);
-      el.removeEventListener('mousedown',  ms);
-      window.removeEventListener('mousemove', mm);
-      window.removeEventListener('mouseup',   onEnd);
-    };
-  }, [isCameraOn, photos.length]);
+  // 同步愿望池（WishDrift 加载完后回传）
+  const handlePoolLoaded = useCallback((pool: ApiWish[]) => {
+    wishPoolRef.current = pool;
+  }, []);
 
   return (
     <div
       className="w-full relative warm-bg text-white overflow-hidden font-serif-custom"
       style={{ height: '100dvh', minHeight: '-webkit-fill-available' }}
     >
-      {/* Animated bokeh dots */}
-      <div className="bokeh-wrap" aria-hidden>
-        <div className="bk" style={{ width:90,  height:90,  top:'12%', left:'14%',  background:'rgba(210,140,40,0.55)', animationDelay:'0s',    animationDuration:'7s'  }} />
-        <div className="bk" style={{ width:70,  height:70,  top:'8%',  right:'18%', background:'rgba(200,130,35,0.5)',  animationDelay:'1.4s',  animationDuration:'8s'  }} />
-        <div className="bk" style={{ width:50,  height:50,  top:'55%', left:'6%',   background:'rgba(190,115,28,0.45)', animationDelay:'2.8s',  animationDuration:'9s'  }} />
-        <div className="bk" style={{ width:55,  height:55,  top:'42%', right:'5%',  background:'rgba(200,120,30,0.45)', animationDelay:'0.7s',  animationDuration:'7.5s'}} />
-        <div className="bk" style={{ width:40,  height:40,  top:'6%',  left:'55%',  background:'rgba(220,150,48,0.5)',  animationDelay:'3.5s',  animationDuration:'6.5s'}} />
-        <div className="bk" style={{ width:35,  height:35,  top:'70%', left:'20%',  background:'rgba(180,110,25,0.4)',  animationDelay:'5.2s',  animationDuration:'8.5s'}} />
-        <div className="bk" style={{ width:45,  height:45,  top:'65%', right:'15%', background:'rgba(190,115,28,0.4)',  animationDelay:'1.9s',  animationDuration:'7.2s'}} />
-      </div>
-
       {/* 3D Scene */}
-      <div ref={sceneContainerRef} className="absolute inset-0 z-0 touch-none">
+      <div className="absolute inset-0 z-0 touch-none">
         {!glLost && (
           <Canvas
             camera={{ position: [0, 0, 26], fov: IS_MOBILE ? 55 : 45 }}
@@ -182,71 +135,66 @@ export default function App() {
             dpr={IS_MOBILE ? [1, 1.5] : [1, 2]}
             onCreated={({ gl }) => {
               const canvas = gl.domElement;
-              canvas.addEventListener('webglcontextlost',     (e) => { e.preventDefault(); setGlLost(true); }, false);
+              canvas.addEventListener('webglcontextlost',     e => { e.preventDefault(); setGlLost(true); }, false);
               canvas.addEventListener('webglcontextrestored', ()  => setGlLost(false), false);
             }}
           >
-            <Scene mode={mode} handState={handState} photos={photos} activePhotoIndex={activePhotoIndex} />
+            <Scene mode={mode} handState={handState} />
           </Canvas>
         )}
         {glLost && (
           <div className="absolute inset-0 flex items-center justify-center text-center px-6">
             <div>
               <p className="mb-3 text-yellow-200">渲染上下文丢失，正在恢复…</p>
-              <button onClick={() => location.reload()}
-                className="px-4 py-2 rounded bg-yellow-500/20 border border-yellow-400/50 text-yellow-200">
-                点此刷新
-              </button>
+              <button onClick={() => location.reload()} className="px-4 py-2 rounded bg-yellow-500/20 border border-yellow-400/50 text-yellow-200">点此刷新</button>
             </div>
           </div>
         )}
       </div>
 
-      <HandManager onHandUpdate={setHandState} isCameraOn={isCameraOn} isMobile={IS_MOBILE} />
-
-      {/* Wish orb HTML layer */}
-      <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 25 }}>
-        <WishOrbLayer orbs={wishes} />
+      {/* 手势特效层 */}
+      <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 5 }}>
+        <GestureEffect mode={mode} />
       </div>
 
-      {/* First-use hint */}
-      {mode === AppMode.TREE && wishes.length === 0 && !wishDialogOpen && (
-        <div
-          className="absolute pointer-events-none text-center"
-          style={{
-            zIndex: 20, left: '50%', top: '63%',
-            transform: 'translate(-50%, -50%)',
-            color: 'rgba(255,210,80,0.42)',
-            fontSize: '0.68rem', letterSpacing: '0.18em',
-            animation: 'wish-pulse 3.5s ease-in-out infinite',
-            textShadow: '0 0 8px rgba(255,180,0,0.3)',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          ✦ 点击树冠，许下心愿 ✦
-        </div>
-      )}
+      {/* 漂流愿望层 */}
+      <WishDrift onShake={handleWishDriftReady} onPoolLoaded={handlePoolLoaded} />
+
+      {/* HandManager */}
+      <HandManager
+        onHandUpdate={setHandState}
+        onGestureTrigger={handleGestureTrigger}
+        isCameraOn={isCameraOn}
+        isMobile={IS_MOBILE}
+      />
 
       {/* UI Overlay */}
       <div className="absolute inset-0 z-10 pointer-events-none">
         <UIOverlay
           mode={mode}
           currentGesture={handState.gesture}
-          onUpload={handlePhotoUpload}
           isCameraOn={isCameraOn}
           onToggleCamera={toggleCamera}
-          isMobile={IS_MOBILE}
-          photos={photos}
+          onShakeTree={handleShakeTree}
+          onOpenWishDialog={() => setWishDialogOpen(true)}
           onShare={handleShare}
+          isMobile={IS_MOBILE}
         />
       </div>
 
+      {/* 运势翻牌 */}
+      {fortuneCard && (
+        <FortuneCard card={fortuneCard} onClose={handleCloseCard} />
+      )}
+
+      {/* 许愿弹窗 */}
       <WishDialog
         open={wishDialogOpen}
         onClose={() => setWishDialogOpen(false)}
         onSubmit={handleWishSubmit}
       />
 
+      {/* Toast */}
       {toastMessage && (
         <div className="absolute top-4 right-4 z-50 bg-white/10 backdrop-blur-md border border-yellow-500/50 text-yellow-200 px-4 py-2 rounded-full shadow-[0_0_20px_rgba(255,215,0,0.3)] text-sm">
           {toastMessage}

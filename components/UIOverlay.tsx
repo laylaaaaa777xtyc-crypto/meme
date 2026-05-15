@@ -1,224 +1,151 @@
-import React from 'react';
-import { AppMode, PhotoData } from '../types';
+import React, { useRef } from 'react';
+import { AppMode, GestureState } from '../types';
 
 interface UIProps {
   mode: AppMode;
-  currentGesture: string;
-  onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  currentGesture: GestureState['gesture'];
   isCameraOn: boolean;
   onToggleCamera: () => void;
+  onShakeTree: () => void;
+  onOpenWishDialog: () => void;
+  onShare: () => void;
   isMobile?: boolean;
-  photos?: PhotoData[];
-  onShare?: () => void;
 }
 
-// 8 Polaroid slots matching the reference image
-const SLOTS: Array<React.CSSProperties & { rotate: string }> = [
-  // ── left side ──
-  { top: '14%', left:  '-3px', rotate: '-16deg', zIndex: 12 },
-  { top: '31%', left:  '2px',  rotate: '-7deg',  zIndex: 11 },
-  { top: '48%', left:  '-2px', rotate: '-4deg',  zIndex: 12 },
-  { top: '64%', left:  '3px',  rotate:  '7deg',  zIndex: 11 },
-  // ── right side ──
-  { top: '15%', right: '-3px', rotate:  '15deg', zIndex: 12 },
-  { top: '32%', right: '2px',  rotate: '-6deg',  zIndex: 11 },
-  { top: '49%', right: '-2px', rotate: '-12deg', zIndex: 12 },
-  { top: '65%', right: '3px',  rotate:  '8deg',  zIndex: 11 },
+const GESTURE_HINTS = [
+  { gesture: 'Open_Palm'   as const, emoji: '🖐️', label: '比心',  sub: '爱情运势', mode: AppMode.LOVE   },
+  { gesture: 'Pointing_Up' as const, emoji: '☝️', label: '合十',  sub: '事业指引', mode: AppMode.CAREER },
+  { gesture: 'Closed_Fist' as const, emoji: '✊', label: '握拳',  sub: '健康建议', mode: AppMode.HEALTH },
 ];
 
 const UIOverlay: React.FC<UIProps> = ({
   mode,
   currentGesture,
-  onUpload,
   isCameraOn,
   onToggleCamera,
-  isMobile = false,
-  photos = [],
+  onShakeTree,
+  onOpenWishDialog,
   onShare,
+  isMobile = false,
 }) => {
-  const showPhotos = mode === AppMode.TREE;
-
   return (
     <div className="w-full h-full relative pointer-events-none select-none overflow-hidden font-serif-custom">
 
-      {/* ── Header ─────────────────────────────── */}
-      <div className="absolute top-0 left-0 w-full z-20 flex items-start px-4 pt-8">
-        {/* Title (centered, flex-1) */}
-        <div className="flex-1 flex flex-col items-center gap-0.5">
+      {/* ── 标题 ── */}
+      <div className="absolute top-0 left-0 w-full z-20 flex items-start px-4 pt-safe-top">
+        <div className="flex-1 flex flex-col items-center gap-0.5 pt-8">
           <div className="flex items-center gap-1.5">
             <span className="sdeco d1">✦</span>
             <span className="sdeco d2 text-[0.55rem]">✧</span>
-            <h1 className="wish-title mx-1">光语许愿树</h1>
+            <h1 className="wish-title mx-1">愿树·漂流</h1>
             <span className="sdeco d3 text-[0.55rem]">✧</span>
             <span className="sdeco d4">✦</span>
           </div>
-          <p className="wish-subtitle">· 点亮每一刻，珍藏每一份美好 ·</p>
+          <p className="wish-subtitle">· 许下愿望，随风漂流 ·</p>
         </div>
-
-        {/* Music button */}
-        <button className="pointer-events-auto music-btn mt-0.5 flex-shrink-0">
+        <button className="pointer-events-auto music-btn mt-8 flex-shrink-0">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
             <path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/>
           </svg>
         </button>
       </div>
 
-      {/* ── Polaroid photos (TREE mode only) ────── */}
-      {showPhotos && SLOTS.map((slot, i) => {
-        const photo = photos[i];
-        if (!photo) return null;
-        const { rotate, ...style } = slot;
-        return (
-          <div
-            key={photo.id}
-            className="absolute w-[82px] md:w-[100px] polaroid"
-            style={{ ...style, transform: `rotate(${rotate})` }}
-          >
-            <div className="polaroid-tape" />
-            <img
-              src={photo.url}
-              className="w-full aspect-square object-cover block"
-              draggable={false}
-            />
-          </div>
-        );
-      })}
+      {/* ── 摄像头按钮（左侧中央） ── */}
+      <div
+        className={`pointer-events-auto absolute left-4 z-30 cam-gold-btn ${isCameraOn ? 'cam-gold-on' : ''}`}
+        style={{ top: '50%', transform: 'translateY(-50%)' }}
+        onClick={onToggleCamera}
+      >
+        {!isCameraOn && (
+          <>
+            <span className="cam-gold-ring"    />
+            <span className="cam-gold-ring r2" />
+            <span className="cam-gold-ring r3" />
+          </>
+        )}
+        <div className="cam-gold-circle">
+          {isCameraOn ? (
+            <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="rgba(255,210,80,0.9)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 7 16 12 23 17V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>
+              <line x1="1" y1="1" x2="23" y2="23"/>
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="rgba(20,10,0,0.88)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 7 16 12 23 17V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>
+            </svg>
+          )}
+        </div>
+        {!isCameraOn && <div className="cam-bubble">开启手势～</div>}
+        <span className="text-[12px] font-bold tracking-wide" style={{
+          color: isCameraOn ? 'rgba(200,150,30,0.75)' : 'rgba(255,225,60,0.95)',
+          textShadow: '0 0 10px rgba(255,200,0,0.6)',
+        }}>
+          {isCameraOn ? '关闭' : '手势'}
+        </span>
+      </div>
 
-      {/* ── Bottom bar ──────────────────────────── */}
+      {/* ── 当前手势提示（摄像头开启时） ── */}
+      {isCameraOn && currentGesture !== 'Unknown' && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 px-4 py-1.5 rounded-full text-xs bg-black/50 backdrop-blur-md border border-white/15 text-white/80 pointer-events-none">
+          {currentGesture === 'Open_Palm'    && '🖐️ 张开手掌 → 爱情运势'}
+          {currentGesture === 'Pointing_Up'  && '☝️ 单指朝上 → 事业指引'}
+          {currentGesture === 'Closed_Fist'  && '✊ 握拳 → 健康建议'}
+        </div>
+      )}
+
+      {/* ── 底部栏 ── */}
       <div className="absolute bottom-0 left-0 w-full z-20">
-        {/* Dark gradient behind */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent pointer-events-none" />
 
-        <div className="relative flex items-end justify-between px-4 pb-8 pt-6 gap-2">
+        <div className="relative flex items-end justify-between px-3 pb-8 pt-5 gap-2">
 
-          {/* Upload (green circle) */}
+          {/* 挂个愿望 */}
           <div className="pointer-events-auto flex flex-col items-center gap-1.5">
-            <label className="abtn-green">
-              <input type="file" accept="image/*" multiple onChange={onUpload} className="hidden" />
-              {/* camera icon */}
+            <button className="abtn-green" onClick={onOpenWishDialog}>
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                <circle cx="12" cy="13" r="4"/>
-              </svg>
-            </label>
-            <div className="text-center leading-tight">
-              <div className="text-[10px] text-white/85 tracking-wide">上传照片</div>
-              <div className="text-[9px]  text-white/45 tracking-wide">珍藏回忆</div>
-            </div>
-          </div>
-
-          {/* Gesture icons (center) */}
-          <div className="flex items-end justify-center gap-5 md:gap-9 flex-1">
-            <GestureCard
-              emoji="✊"
-              label="握紧"
-              sub="凝聚光芒"
-              active={mode === AppMode.TREE && (isCameraOn ? currentGesture === 'Closed_Fist' : true)}
-            />
-            <GestureCard
-              emoji="🖐"
-              label="张开"
-              sub="释放温暖"
-              active={mode === AppMode.CLOUD && (isCameraOn ? currentGesture === 'Open_Palm' : true)}
-            />
-            <GestureCard
-              emoji="☝️"
-              label="轻触"
-              sub="探索回忆"
-              active={mode === AppMode.ZOOM}
-            />
-          </div>
-
-          {/* Share (gold circle) */}
-          <div className="pointer-events-auto flex flex-col items-center gap-1.5">
-            <button className="abtn-gold" onClick={onShare}>
-              {/* share icon */}
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="rgba(0,0,0,0.75)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="18" cy="5"  r="3"/>
-                <circle cx="6"  cy="12" r="3"/>
-                <circle cx="18" cy="19" r="3"/>
-                <line x1="8.6"  y1="13.5" x2="15.4" y2="17.5"/>
-                <line x1="15.4" y1="6.5"  x2="8.6"  y2="10.5"/>
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
             </button>
             <div className="text-center leading-tight">
-              <div className="text-[10px] text-white/85 tracking-wide">分享心光</div>
-              <div className="text-[9px]  text-white/45 tracking-wide">传递美好</div>
+              <div className="text-[10px] text-white/85 tracking-wide">挂个愿望</div>
             </div>
+          </div>
+
+          {/* 手势提示（中央3格） */}
+          <div className="flex items-end justify-center gap-4 flex-1">
+            {GESTURE_HINTS.map(h => (
+              <div key={h.gesture} className={`flex flex-col items-center gap-0.5 transition-all duration-300 ${
+                currentGesture === h.gesture || mode === h.mode ? 'opacity-100 scale-110' : 'opacity-55'
+              }`}>
+                <div className="text-[2rem] leading-none">{h.emoji}</div>
+                <div className={`text-[10px] font-semibold tracking-wide mt-0.5 ${
+                  mode === h.mode ? 'text-yellow-300' : 'text-white'
+                }`}>{h.label}</div>
+                <div className="text-[9px] text-white/50">{h.sub}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* 右侧：摇树 + 分享 */}
+          <div className="flex flex-col gap-2 items-center pointer-events-auto">
+            <button className="shake-btn" onClick={onShakeTree}>
+              <span className="text-[1.2rem]">🌳</span>
+              <span className="text-[9px] font-bold tracking-wide mt-0.5 text-black/75">摇一摇</span>
+            </button>
+            <button className="abtn-gold" onClick={onShare}>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="rgba(0,0,0,0.75)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                <line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/>
+              </svg>
+            </button>
+            <div className="text-[9px] text-white/50 tracking-wide">分享</div>
           </div>
 
         </div>
       </div>
 
-      {/* ── 左侧金色摄像头按钮 ── */}
-      <div
-          className={`pointer-events-auto absolute left-4 z-30 cam-gold-btn ${isCameraOn ? 'cam-gold-on' : ''}`}
-          style={{ top: '50%', transform: 'translateY(-50%)' }}
-          onClick={onToggleCamera}
-        >
-          {/* 扩散光环（未开启时显示） */}
-          {!isCameraOn && (
-            <>
-              <span className="cam-gold-ring"    />
-              <span className="cam-gold-ring r2" />
-              <span className="cam-gold-ring r3" />
-            </>
-          )}
-
-          {/* 圆形按钮 */}
-          <div className="cam-gold-circle">
-            {isCameraOn ? (
-              /* 已开启：摄像头划线图标 */
-              <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="rgba(255,210,80,0.9)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M23 7 16 12 23 17V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>
-                <line x1="1" y1="1" x2="23" y2="23"/>
-              </svg>
-            ) : (
-              /* 未开启：摄像头图标 */
-              <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="rgba(20,10,0,0.88)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M23 7 16 12 23 17V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>
-              </svg>
-            )}
-          </div>
-
-          {/* 气泡提示（未开启时显示） */}
-          {!isCameraOn && (
-            <div className="cam-bubble">点击开始～</div>
-          )}
-
-          {/* 文字标签 */}
-          <span
-            className="text-[12px] font-bold tracking-wide"
-            style={{ color: isCameraOn ? 'rgba(200,150,30,0.75)' : 'rgba(255,225,60,0.95)',
-                     textShadow: '0 0 10px rgba(255,200,0,0.6)' }}
-          >
-            {isCameraOn ? '关闭' : '开启手势'}
-          </span>
-        </div>
-
-      {/* Gesture label when camera on */}
-      {isCameraOn && (
-        <div className="absolute top-20 right-4 z-30 flex flex-col gap-1.5 text-xs">
-          <div className="bg-black/55 backdrop-blur-md px-3 py-1.5 rounded border border-white/15 text-white/80">
-            手势: <span className="text-yellow-400 font-bold">{currentGesture === 'Closed_Fist' ? '✊ 握拳' : currentGesture === 'Open_Palm' ? '🖐️ 张开' : '未检测'}</span>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 };
-
-const GestureCard = ({
-  emoji, label, sub, active,
-}: {
-  emoji: string; label: string; sub: string; active: boolean;
-}) => (
-  <div className={`flex flex-col items-center gap-0.5 transition-all duration-300 ${active ? 'opacity-100 scale-110' : 'opacity-60'}`}>
-    <div className="text-[2.4rem] md:text-[2.8rem] leading-none">{emoji}</div>
-    <div className={`text-[11px] md:text-sm font-semibold tracking-wide mt-1 ${active ? 'text-yellow-300' : 'text-white'}`}>{label}</div>
-    <div className="text-[9px] md:text-[11px] text-white/50">{sub}</div>
-  </div>
-);
 
 export default UIOverlay;
